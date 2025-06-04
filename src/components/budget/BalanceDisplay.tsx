@@ -4,7 +4,7 @@
 import React from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import type { Transaction, MonthKey } from "@/lib/types";
-import { MONTHS } from "@/lib/types"; // Import MONTHS
+import { MONTHS } from "@/lib/types"; 
 import { DollarSign, TrendingDown, TrendingUp, Wallet } from "lucide-react";
 import type { CarryOverDetails } from "./BudgetPlannerClient";
 
@@ -27,7 +27,7 @@ export function BalanceDisplay({ incomes, spendings, monthName, carryOverDetails
   return (
     <Card className="my-6 shadow-md">
       <CardHeader>
-        <CardTitle className="text-2xl font-headline text-center text-primary">
+        <CardTitle className="text-2xl font-headline text-center text-green-600">
           Account Balance - {monthName}
         </CardTitle>
       </CardHeader>
@@ -54,10 +54,10 @@ export function BalanceDisplay({ incomes, spendings, monthName, carryOverDetails
         </div>
         <div className={`flex justify-between items-center p-4 rounded-lg shadow-inner ${balance >= 0 ? 'bg-primary/20' : 'bg-destructive/20'}`}>
           <div className="flex items-center">
-            <Wallet className={`h-6 w-6 mr-2 ${balance >= 0 ? 'text-primary' : 'text-destructive'}`} />
+            <Wallet className={`h-6 w-6 mr-2 ${balance >= 0 ? 'text-green-600' : 'text-destructive'}`} />
             <span className="text-lg font-bold">Remaining Balance</span>
           </div>
-          <span className={`text-2xl font-extrabold ${balance >= 0 ? 'text-primary' : 'text-destructive'}`}>
+          <span className={`text-2xl font-extrabold ${balance >= 0 ? 'text-green-600' : 'text-destructive'}`}>
             {balance.toFixed(2)} RON
           </span>
         </div>
@@ -65,3 +65,4 @@ export function BalanceDisplay({ incomes, spendings, monthName, carryOverDetails
     </Card>
   );
 }
+
