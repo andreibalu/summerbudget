@@ -101,15 +101,15 @@ export default function BudgetPlannerPage() {
     <main className="min-h-screen bg-background text-foreground p-4 md:p-8 flex flex-col items-center font-body">
       <Card className="w-full max-w-5xl shadow-xl rounded-lg">
         <CardHeader className="bg-primary/10 p-6 rounded-t-lg">
-          <div className="flex flex-col items-center gap-4 sm:flex-row sm:justify-between">
+          <div className="flex flex-col items-center gap-2 sm:flex-row sm:justify-between sm:gap-4">
             <div className="flex items-center space-x-2 sm:space-x-3">
-              <Leaf className="h-8 w-8 sm:h-10 sm:w-10 text-primary" />
-              <CardTitle className="text-2xl text-center sm:text-left sm:text-3xl md:text-4xl font-headline text-primary tracking-tight">
+              <Leaf className="h-6 w-6 sm:h-8 md:h-10 text-primary" />
+              <CardTitle className="text-xl text-center sm:text-left sm:text-2xl md:text-4xl font-headline text-primary tracking-tight">
                 Summer Budget
               </CardTitle>
-              <Leaf className="h-8 w-8 sm:h-10 sm:w-10 text-primary transform scale-x-[-1]" />
+              <Leaf className="h-6 w-6 sm:h-8 md:h-10 text-primary transform scale-x-[-1]" />
             </div>
-            <Button variant="outline" onClick={() => setShowRoomModal(true)} className="w-full sm:w-auto">
+            <Button variant="outline" onClick={() => setShowRoomModal(true)} className="sm:w-auto">
               {currentRoomId ? <Users className="mr-2 h-4 w-4" /> : <User className="mr-2 h-4 w-4" />}
               {currentRoomId ? 'Room Mode' : 'Personal Mode'}
             </Button>
