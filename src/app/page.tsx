@@ -75,9 +75,9 @@ export default function BudgetPlannerPage() {
 
     setIsLoadingRoomAction(true);
     try {
-      if (currentRoomId) { // If currently in a room, switch to personal mode by leaving
-        await handleLeaveRoom(); // This will also set currentRoomId to null
-      } else if (userOwnedRoomId) { // If in personal, and has an owned room
+      if (currentRoomId) { 
+        await handleLeaveRoom(); 
+      } else if (userOwnedRoomId) { 
           const roomRef = ref(db, `rooms/${userOwnedRoomId}`);
           const snapshot = await get(roomRef);
           if (snapshot.exists()) {
@@ -85,20 +85,18 @@ export default function BudgetPlannerPage() {
               const membersRef = ref(db, `rooms/${userOwnedRoomId}/members/${user.uid}`);
               const memberSnapshot = await get(membersRef);
               if (!memberSnapshot.exists() || memberSnapshot.val() !== true) {
-                  await firebaseSet(membersRef, true); // Re-join if somehow not a member
+                  await firebaseSet(membersRef, true); 
               }
               setCurrentRoomId(userOwnedRoomId);
               setCurrentRoomName(roomData.meta?.roomName || null);
-              // Success toast removed
           } else {
-              // Owned room doesn't exist anymore, clear the reference and open modal
               await firebaseRemove(ref(db, `users/${user.uid}/createdRoomId`));
               setUserOwnedRoomId(null);
               setCurrentRoomName(null);
               toast({ variant: "destructive", title: "Your Room Not Found", description: "Your previously created room no longer exists. Opening room options." });
               setShowRoomModal(true);
           }
-      } else { // In personal, no owned room, open modal
+      } else { 
           setShowRoomModal(true);
       }
     } catch (error) {
@@ -132,7 +130,6 @@ export default function BudgetPlannerPage() {
       setCurrentRoomName(roomName);
       setUserOwnedRoomId(newRoomId);
       setShowRoomModal(false);
-      // Success toast removed
     } catch (error) {
       console.error("Failed to create room in Firebase:", error);
       const e = error as Error & { code?: string };
@@ -168,7 +165,6 @@ export default function BudgetPlannerPage() {
         setCurrentRoomId(upperRoomId);
         setCurrentRoomName(roomData.meta?.roomName || null);
         setShowRoomModal(false);
-        // Success toast removed
       } else {
         toast({ variant: "destructive", title: "Room Not Found", description: `Room ${upperRoomId} does not exist.` });
       }
@@ -190,14 +186,10 @@ export default function BudgetPlannerPage() {
       setCurrentRoomId(null);
       setCurrentRoomName(null);
       setShowRoomModal(false);
-      if (currentRoomId) {
-         // No toast here if it's just missing info for a non-operation
-      }
       return;
     }
 
     const roomToLeaveId = currentRoomId;
-    // const roomToLeaveName = currentRoomName; // Not needed for removed toasts
     setIsLoadingRoomAction(true);
 
     try {
@@ -209,23 +201,26 @@ export default function BudgetPlannerPage() {
 
       if (userWasMember && numberOfMembers === 1 && currentMembers[user.uid]) {
         await firebaseRemove(ref(db, `rooms/${roomToLeaveId}`));
-        // Success toast removed
         if (userOwnedRoomId === roomToLeaveId) {
           await firebaseRemove(ref(db, `users/${user.uid}/createdRoomId`));
           setUserOwnedRoomId(null);
         }
       } else if (userWasMember) {
         await firebaseRemove(ref(db, `rooms/${roomToLeaveId}/members/${user.uid}`));
-        // Success toast removed
       } else if (!userWasMember && numberOfMembers > 0) {
-         // Success toast removed
          if (userOwnedRoomId === roomToLeaveId) {
             await firebaseRemove(ref(db, `users/${user.uid}/createdRoomId`));
             setUserOwnedRoomId(null);
         }
       }
+      setCurrentRoomId(null); // Switch to personal mode regardless of Firebase success here for UI responsiveness
+      setCurrentRoomName(null);
+      setShowRoomModal(false);
     } catch (error) {
       console.error("Error leaving room:", error);
+      setCurrentRoomId(null); 
+      setCurrentRoomName(null);
+      setShowRoomModal(false);
       const e = error as Error & { code?: string };
       if (e.code === 'PERMISSION_DENIED') {
           toast({ variant: "destructive", title: "Permission Denied", description: "Could not update room status. Check Firebase rules."});
@@ -233,9 +228,6 @@ export default function BudgetPlannerPage() {
           toast({ variant: "destructive", title: "Error Leaving Room", description: "An error occurred. See console." });
       }
     } finally {
-      setCurrentRoomId(null);
-      setCurrentRoomName(null);
-      setShowRoomModal(false);
       setIsLoadingRoomAction(false);
     }
   };
@@ -244,7 +236,6 @@ export default function BudgetPlannerPage() {
     if (!currentRoomId) return;
     setCurrentRoomId(null);
     setCurrentRoomName(null);
-    // Success toast removed
   };
 
   if (authLoading || !user) {
@@ -258,12 +249,12 @@ export default function BudgetPlannerPage() {
 
   const getPersonalModeButtonDetails = () => {
     if (currentRoomId) {
-        return { text: 'Menu', icon: <MenuIcon className="mr-2 h-4 w-4" /> };
+        return { text: 'To Personal Mode', icon: <User className="mr-2 h-4 w-4" /> };
     }
     if (userOwnedRoomId) {
       return { text: 'My Room', icon: <Users className="mr-2 h-4 w-4" /> };
     }
-    return { text: 'Room Options', icon: <Users className="mr-2 h-4 w-4" /> };
+    return { text: 'Create Room', icon: <Users className="mr-2 h-4 w-4" /> };
   };
 
 
