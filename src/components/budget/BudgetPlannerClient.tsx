@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -6,30 +7,53 @@ import { initialBudgetData, MONTHS } from "@/lib/types";
 import type { BudgetData, MonthKey, Transaction } from "@/lib/types";
 import { MonthView } from "./MonthView";
 
+const USER_ID_STORAGE_KEY = "summerSproutUserId";
+const BUDGET_DATA_STORAGE_KEY_BASE = "summerSproutBudgetData";
+
 export function BudgetPlannerClient() {
   const [budgetData, setBudgetData] = useState<BudgetData>(initialBudgetData);
   const [isClient, setIsClient] = useState(false);
+  const [userId, setUserId] = useState<string | null>(null);
 
   useEffect(() => {
     setIsClient(true);
-    // Load data from localStorage if available
-    const savedData = localStorage.getItem("summerSproutBudgetData");
-    if (savedData) {
-      try {
-        setBudgetData(JSON.parse(savedData));
-      } catch (error) {
-        console.error("Failed to parse budget data from localStorage", error);
-        localStorage.removeItem("summerSproutBudgetData"); // Clear corrupted data
+
+    let currentUserId = localStorage.getItem(USER_ID_STORAGE_KEY);
+    if (!currentUserId) {
+      currentUserId = crypto.randomUUID();
+      localStorage.setItem(USER_ID_STORAGE_KEY, currentUserId);
+    }
+    setUserId(currentUserId);
+
+    if (currentUserId) {
+      const budgetStorageKey = `${BUDGET_DATA_STORAGE_KEY_BASE}_${currentUserId}`;
+      const savedData = localStorage.getItem(budgetStorageKey);
+      if (savedData) {
+        try {
+          const parsedData = JSON.parse(savedData);
+          // Ensure all months are present, merging with initialBudgetData if necessary
+          const completeData = MONTHS.reduce((acc, month) => {
+            acc[month] = parsedData[month] || initialBudgetData[month];
+            return acc;
+          }, {} as BudgetData);
+          setBudgetData(completeData);
+        } catch (error) {
+          console.error("Failed to parse budget data from localStorage", error);
+          localStorage.removeItem(budgetStorageKey); // Clear corrupted data
+          setBudgetData(initialBudgetData); // Reset to initial data
+        }
+      } else {
+        setBudgetData(initialBudgetData); // Initialize if no data for this user
       }
     }
   }, []);
 
   useEffect(() => {
-    if (isClient) {
-      // Save data to localStorage whenever it changes
-      localStorage.setItem("summerSproutBudgetData", JSON.stringify(budgetData));
+    if (isClient && userId) {
+      const budgetStorageKey = `${BUDGET_DATA_STORAGE_KEY_BASE}_${userId}`;
+      localStorage.setItem(budgetStorageKey, JSON.stringify(budgetData));
     }
-  }, [budgetData, isClient]);
+  }, [budgetData, userId, isClient]);
 
 
   const handleAddTransaction = (
@@ -39,7 +63,7 @@ export function BudgetPlannerClient() {
   ) => {
     setBudgetData((prevData) => {
       const newTransaction: Transaction = { ...transaction, id: crypto.randomUUID() };
-      const updatedMonthData = { ...prevData[month] };
+      const updatedMonthData = { ...(prevData[month] || initialBudgetData[month]) }; // Ensure month data exists
       if (type === "income") {
         updatedMonthData.incomes = [...updatedMonthData.incomes, newTransaction];
       } else {
@@ -55,7 +79,7 @@ export function BudgetPlannerClient() {
     id: string
   ) => {
     setBudgetData((prevData) => {
-      const updatedMonthData = { ...prevData[month] };
+      const updatedMonthData = { ...(prevData[month] || initialBudgetData[month]) }; // Ensure month data exists
       if (type === "income") {
         updatedMonthData.incomes = updatedMonthData.incomes.filter((t) => t.id !== id);
       } else {
@@ -69,14 +93,14 @@ export function BudgetPlannerClient() {
     setBudgetData((prevData) => ({
       ...prevData,
       [month]: {
-        ...prevData[month],
+        ...(prevData[month] || initialBudgetData[month]), // Ensure month data exists
         financialGoal: goal,
       },
     }));
   };
 
-  if (!isClient) {
-    // Render nothing or a loading indicator on the server or before hydration
+  if (!isClient || !userId) {
+    // Render nothing or a loading indicator on the server, before hydration, or before userId is set
     return null; 
   }
 
@@ -93,7 +117,7 @@ export function BudgetPlannerClient() {
         <TabsContent key={month} value={month}>
           <MonthView
             monthKey={month}
-            data={budgetData[month]}
+            data={budgetData[month] || initialBudgetData[month]} // Ensure data passed to MonthView is always valid
             onAddTransaction={handleAddTransaction}
             onDeleteTransaction={handleDeleteTransaction}
             onUpdateFinancialGoal={handleUpdateFinancialGoal}
