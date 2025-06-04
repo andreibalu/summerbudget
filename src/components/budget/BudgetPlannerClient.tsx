@@ -2,13 +2,14 @@
 "use client";
 
 import React, { useState, useEffect, useCallback, useRef } from "react";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { initialBudgetData, MONTHS, USER_ID_STORAGE_KEY, BUDGET_DATA_STORAGE_KEY_PREFIX } from "@/lib/types";
 import type { BudgetData, MonthKey, Transaction } from "@/lib/types";
 import { MonthView } from "./MonthView";
 import { db } from "@/lib/firebase"; // Firebase RTDB
 import { ref as dbRef, onValue, set as firebaseSet, off } from "firebase/database";
 import { useToast } from "@/hooks/use-toast";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 
 interface BudgetPlannerClientProps {
   currentRoomId: string | null;
@@ -20,11 +21,7 @@ export function BudgetPlannerClient({ currentRoomId }: BudgetPlannerClientProps)
   const [userId, setUserId] = useState<string | null>(null);
   const { toast } = useToast();
   const [isDataLoadedFromDB, setIsDataLoadedFromDB] = useState(false);
-  const budgetDataRef = useRef(budgetData); // Ref to hold the latest budgetData for comparison
-
-  useEffect(() => {
-    budgetDataRef.current = budgetData;
-  }, [budgetData]);
+  const [activeMonth, setActiveMonth] = useState<MonthKey>(MONTHS[0]);
 
   useEffect(() => {
     setIsClient(true);
@@ -65,13 +62,11 @@ export function BudgetPlannerClient({ currentRoomId }: BudgetPlannerClientProps)
             return acc;
           }, {} as BudgetData);
           setBudgetData(completeData);
-          if (!isDataLoadedFromDB) { // Avoid toast on every sync, only on initial load of existing data
+          if (!isDataLoadedFromDB) { 
              toast({ title: "Data Synced", description: `Budget data loaded from room ${currentRoomId}.` });
           }
         } else {
-          // Room doesn't exist in DB, or is empty. Initialize it.
-          // This might have been done at room creation, but this is a fallback.
-          setBudgetData(initialBudgetData); // Set local state
+          setBudgetData(initialBudgetData); 
           firebaseSet(roomBudgetDataRef, initialBudgetData)
             .then(() => {
                toast({ title: "Room Initialized", description: `New room ${currentRoomId} created in the cloud.` });
@@ -85,7 +80,7 @@ export function BudgetPlannerClient({ currentRoomId }: BudgetPlannerClientProps)
       }, (error) => {
         console.error("Firebase onValue error:", error);
         toast({ variant: "destructive", title: "Sync Error", description: "Could not fetch data from cloud." });
-        setIsDataLoadedFromDB(true); // Allow local changes even if initial load fails
+        setIsDataLoadedFromDB(true); 
       });
 
       return () => {
@@ -94,7 +89,7 @@ export function BudgetPlannerClient({ currentRoomId }: BudgetPlannerClientProps)
       };
     } else {
       // Personal mode: Load from localStorage
-      setIsDataLoadedFromDB(false); // Not using DB for personal mode
+      setIsDataLoadedFromDB(false); 
       const personalKey = getPersonalStorageKey();
       if (personalKey) {
         const savedData = localStorage.getItem(personalKey);
@@ -127,11 +122,9 @@ export function BudgetPlannerClient({ currentRoomId }: BudgetPlannerClientProps)
   useEffect(() => {
     if (!isClient) return;
 
+    // Debounce or selective save might be needed for high-frequency updates
+    // For now, simple save on budgetData change if conditions are met
     if (currentRoomId && db && isDataLoadedFromDB) {
-      // Only write if data has actually changed from what was last known to be in DB or set locally
-      // This simple check might not be perfect for deep object changes if onValue fires for local sets.
-      // However, RTDB client SDK is usually smart about not re-triggering for identical local data.
-      // A more robust check would involve deep comparison or versioning if needed.
       const roomBudgetDataRef = dbRef(db, `rooms/${currentRoomId}/budgetData`);
       firebaseSet(roomBudgetDataRef, budgetData).catch(error => {
         console.error("Failed to sync data to Firebase:", error);
@@ -154,7 +147,7 @@ export function BudgetPlannerClient({ currentRoomId }: BudgetPlannerClientProps)
   ) => {
     setBudgetData((prevData) => {
       const newTransaction: Transaction = { ...transaction, id: crypto.randomUUID() };
-      const currentMonthData = prevData[month] || { incomes: [], spendings: [] };
+      const currentMonthData = prevData[month] || { incomes: [], spendings: [] , financialGoal: ''};
       const updatedMonthData = { ...currentMonthData }; 
       
       if (type === "income") {
@@ -172,7 +165,7 @@ export function BudgetPlannerClient({ currentRoomId }: BudgetPlannerClientProps)
     id: string
   ) => {
     setBudgetData((prevData) => {
-      const currentMonthData = prevData[month] || { incomes: [], spendings: [] };
+      const currentMonthData = prevData[month] || { incomes: [], spendings: [], financialGoal: '' };
       const updatedMonthData = { ...currentMonthData }; 
       if (type === "income") {
         updatedMonthData.incomes = updatedMonthData.incomes.filter((t) => t.id !== id);
@@ -188,24 +181,36 @@ export function BudgetPlannerClient({ currentRoomId }: BudgetPlannerClientProps)
   }
 
   return (
-    <Tabs defaultValue={MONTHS[0]} className="w-full">
-      <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 mb-6">
-        {MONTHS.map((month) => (
-          <TabsTrigger key={month} value={month} className="px-2 py-1.5 text-xs sm:px-3 sm:text-sm md:text-base">
-            {month}
-          </TabsTrigger>
-        ))}
-      </TabsList>
-      {MONTHS.map((month) => (
-        <TabsContent key={month} value={month}>
-          <MonthView
-            monthKey={month}
-            data={budgetData[month] || initialBudgetData[month]} 
-            onAddTransaction={handleAddTransaction}
-            onDeleteTransaction={handleDeleteTransaction}
-          />
-        </TabsContent>
-      ))}
-    </Tabs>
+    <div className="w-full">
+      <div className="mb-6 flex justify-center">
+        <div className="w-full md:w-auto">
+           <Label htmlFor="month-selector" className="sr-only">Select Month</Label>
+           <Select
+            value={activeMonth}
+            onValueChange={(value) => setActiveMonth(value as MonthKey)}
+          >
+            <SelectTrigger id="month-selector" className="w-full md:w-[200px] text-base py-2.5">
+              <SelectValue placeholder="Select month..." />
+            </SelectTrigger>
+            <SelectContent>
+              {MONTHS.map((month) => (
+                <SelectItem key={month} value={month} className="text-base py-2">
+                  {month}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      <MonthView
+        key={activeMonth}
+        monthKey={activeMonth}
+        data={budgetData[activeMonth] || initialBudgetData[activeMonth]} 
+        onAddTransaction={handleAddTransaction}
+        onDeleteTransaction={handleDeleteTransaction}
+      />
+    </div>
   );
 }
+
