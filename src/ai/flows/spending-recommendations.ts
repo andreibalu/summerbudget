@@ -38,6 +38,7 @@ export async function getSpendingRecommendations(
 
 const prompt = ai.definePrompt({
   name: 'spendingRecommendationsPrompt',
+  model: 'googleai/gemini-2.0-flash', // Explicitly specify the model here
   input: {schema: SpendingRecommendationsInputSchema},
   output: {schema: SpendingRecommendationsOutputSchema},
   prompt: `You are a personal finance advisor. Analyze the user's spending habits and provide personalized tips for optimizing their budget.
@@ -63,4 +64,3 @@ const spendingRecommendationsFlow = ai.defineFlow(
     return output!;
   }
 );
-
