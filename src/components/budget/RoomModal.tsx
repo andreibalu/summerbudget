@@ -14,14 +14,14 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Copy } from 'lucide-react';
+import { Copy, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 
 interface RoomModalProps {
   isOpen: boolean;
   currentRoomId: string | null;
   onClose: () => void;
-  onCreateRoom: () => string; // Parent generates and returns the new room ID
+  onCreateRoom: () => string; 
   onJoinRoom: (roomId: string) => void;
   onLeaveRoom: () => void;
 }
@@ -31,8 +31,7 @@ export function RoomModal({ isOpen, currentRoomId, onClose, onCreateRoom, onJoin
   const { toast } = useToast();
 
   const handleCreateRoom = () => {
-    const newRoomId = onCreateRoom(); // Parent creates, sets state, and returns it
-    // Parent will also close the modal after setting the room ID.
+    onCreateRoom();
   };
 
   const handleJoinRoom = () => {
@@ -103,6 +102,14 @@ export function RoomModal({ isOpen, currentRoomId, onClose, onCreateRoom, onJoin
               </div>
             </>
           )}
+           <div className="mt-4 p-3 bg-accent/10 rounded-md border border-accent/50">
+            <div className="flex items-start">
+              <AlertTriangle className="h-5 w-5 text-accent mr-2 shrink-0" />
+              <p className="text-xs text-accent-foreground">
+                <strong>Note:</strong> Room data is saved locally in your browser. Changes are <strong>not</strong> automatically synced across different devices or browsers in real-time.
+              </p>
+            </div>
+          </div>
         </div>
         <DialogFooter className="sm:justify-start">
           <DialogClose asChild>
