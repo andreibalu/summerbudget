@@ -1,62 +1,89 @@
 
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { initialBudgetData, MONTHS } from "@/lib/types";
 import type { BudgetData, MonthKey, Transaction } from "@/lib/types";
 import { MonthView } from "./MonthView";
 
-const USER_ID_STORAGE_KEY = "summerSproutUserId";
-const BUDGET_DATA_STORAGE_KEY_BASE = "summerSproutBudgetData";
+const USER_ID_STORAGE_KEY = "summerSproutUserId"; // For personal mode fallback
+const BUDGET_DATA_STORAGE_KEY_PREFIX = "summerSproutBudgetData";
 
-export function BudgetPlannerClient() {
+interface BudgetPlannerClientProps {
+  currentRoomId: string | null;
+}
+
+export function BudgetPlannerClient({ currentRoomId }: BudgetPlannerClientProps) {
   const [budgetData, setBudgetData] = useState<BudgetData>(initialBudgetData);
   const [isClient, setIsClient] = useState(false);
-  const [userId, setUserId] = useState<string | null>(null);
+  const [userId, setUserId] = useState<string | null>(null); // For personal mode
 
+  // Effect to set client status and load user ID for personal mode
   useEffect(() => {
     setIsClient(true);
-
-    let currentUserId = localStorage.getItem(USER_ID_STORAGE_KEY);
-    if (!currentUserId) {
-      currentUserId = crypto.randomUUID();
-      localStorage.setItem(USER_ID_STORAGE_KEY, currentUserId);
+    let id = localStorage.getItem(USER_ID_STORAGE_KEY);
+    if (!id) {
+      id = crypto.randomUUID();
+      localStorage.setItem(USER_ID_STORAGE_KEY, id);
     }
-    setUserId(currentUserId);
-
-    if (currentUserId) {
-      const budgetStorageKey = `${BUDGET_DATA_STORAGE_KEY_BASE}_${currentUserId}`;
-      const savedData = localStorage.getItem(budgetStorageKey);
-      if (savedData) {
-        try {
-          const parsedData = JSON.parse(savedData);
-          // Ensure all months are present, merging with initialBudgetData if necessary
-          const completeData = MONTHS.reduce((acc, month) => {
-            acc[month] = parsedData[month] || initialBudgetData[month];
-            // Ensure incomes and spendings arrays exist
-            acc[month].incomes = acc[month].incomes || [];
-            acc[month].spendings = acc[month].spendings || [];
-            return acc;
-          }, {} as BudgetData);
-          setBudgetData(completeData);
-        } catch (error) {
-          console.error("Failed to parse budget data from localStorage", error);
-          localStorage.removeItem(budgetStorageKey); // Clear corrupted data
-          setBudgetData(initialBudgetData); // Reset to initial data
-        }
-      } else {
-        setBudgetData(initialBudgetData); // Initialize if no data for this user
-      }
-    }
+    setUserId(id);
   }, []);
 
-  useEffect(() => {
-    if (isClient && userId) {
-      const budgetStorageKey = `${BUDGET_DATA_STORAGE_KEY_BASE}_${userId}`;
-      localStorage.setItem(budgetStorageKey, JSON.stringify(budgetData));
+  const getStorageKey = useCallback(() => {
+    if (currentRoomId) {
+      return `${BUDGET_DATA_STORAGE_KEY_PREFIX}_room_${currentRoomId}`;
     }
-  }, [budgetData, userId, isClient]);
+    if (userId) { // Fallback to personal user-specific key if no room and userId is available
+      return `${BUDGET_DATA_STORAGE_KEY_PREFIX}_user_${userId}`;
+    }
+    return null; // Should not happen if userId is set correctly
+  }, [currentRoomId, userId]);
+
+  // Effect to load budget data when component mounts or room/user ID changes
+  useEffect(() => {
+    if (!isClient || !userId) return; // Ensure userId is loaded for personal mode key generation
+
+    const storageKey = getStorageKey();
+    if (!storageKey) {
+      // This case might happen if userId isn't set yet, or if we decide to not have a personal fallback
+      // For now, if no room and no userId, it defaults to initialBudgetData
+      setBudgetData(initialBudgetData);
+      return;
+    }
+    
+    const savedData = localStorage.getItem(storageKey);
+    if (savedData) {
+      try {
+        const parsedData = JSON.parse(savedData);
+        const completeData = MONTHS.reduce((acc, month) => {
+          acc[month] = parsedData[month] || initialBudgetData[month];
+          acc[month].incomes = acc[month].incomes || [];
+          acc[month].spendings = acc[month].spendings || [];
+          return acc;
+        }, {} as BudgetData);
+        setBudgetData(completeData);
+      } catch (error) {
+        console.error(`Failed to parse budget data from localStorage (key: ${storageKey})`, error);
+        localStorage.removeItem(storageKey);
+        setBudgetData(initialBudgetData);
+      }
+    } else {
+      // If no data for this key (new room or new user), initialize with default
+      setBudgetData(initialBudgetData);
+    }
+  }, [isClient, userId, currentRoomId, getStorageKey]);
+
+
+  // Effect to save budget data whenever it changes or room/user ID changes
+  useEffect(() => {
+    if (!isClient || !userId) return;
+
+    const storageKey = getStorageKey();
+    if (storageKey) {
+      localStorage.setItem(storageKey, JSON.stringify(budgetData));
+    }
+  }, [budgetData, isClient, userId, getStorageKey]);
 
 
   const handleAddTransaction = (
@@ -66,7 +93,9 @@ export function BudgetPlannerClient() {
   ) => {
     setBudgetData((prevData) => {
       const newTransaction: Transaction = { ...transaction, id: crypto.randomUUID() };
-      const updatedMonthData = { ...(prevData[month] || initialBudgetData[month]) }; 
+      const currentMonthData = prevData[month] || { incomes: [], spendings: [] }; // Ensure month data exists
+      const updatedMonthData = { ...currentMonthData }; 
+      
       if (type === "income") {
         updatedMonthData.incomes = [...updatedMonthData.incomes, newTransaction];
       } else {
@@ -82,7 +111,8 @@ export function BudgetPlannerClient() {
     id: string
   ) => {
     setBudgetData((prevData) => {
-      const updatedMonthData = { ...(prevData[month] || initialBudgetData[month]) }; 
+      const currentMonthData = prevData[month] || { incomes: [], spendings: [] };
+      const updatedMonthData = { ...currentMonthData }; 
       if (type === "income") {
         updatedMonthData.incomes = updatedMonthData.incomes.filter((t) => t.id !== id);
       } else {
@@ -92,9 +122,12 @@ export function BudgetPlannerClient() {
     });
   };
   
-  if (!isClient || !userId) {
+  if (!isClient) {
+    // Render nothing or a loading indicator until client-side checks are complete
+    // This matches the behavior in page.tsx
     return null; 
   }
+
 
   return (
     <Tabs defaultValue={MONTHS[0]} className="w-full">
