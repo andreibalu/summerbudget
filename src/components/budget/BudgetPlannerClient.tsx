@@ -44,7 +44,6 @@ export function BudgetPlannerClient({ currentRoomId, user }: BudgetPlannerClient
   useEffect(() => {
     if (!db || !user?.uid) {
       if (user?.uid && !db) {
-        // Toast for critical db error can remain if desired, or removed
         // toast({ variant: "destructive", title: "Database Error", description: "Realtime Database not connected. Sync disabled." });
       }
       setIsDataLoaded(true); 
@@ -78,8 +77,8 @@ export function BudgetPlannerClient({ currentRoomId, user }: BudgetPlannerClient
         dataToSet = JSON.parse(JSON.stringify(initialBudgetData));
         firebaseSet(dataRef, dataToSet)
           .catch(error => {
-            console.error("Failed to initialize data in Firebase:", error);
-            toast({ variant: "destructive", title: "Initialization Error", description: "Could not create budget in cloud." });
+            console.error("Failed to initialize personal budget data in Firebase on first load:", error);
+            // Removed toast: toast({ variant: "destructive", title: "Initialization Error", description: "Could not create budget in cloud." });
           });
       }
       setBudgetData(dataToSet);
@@ -88,7 +87,7 @@ export function BudgetPlannerClient({ currentRoomId, user }: BudgetPlannerClient
       console.error(`Firebase onValue error for path: ${dataPath}`, error);
       const contextDescription = currentRoomId ? `room '${currentRoomId}'` : "personal budget";
       let errorDescription = `Could not load data for ${contextDescription}.`;
-      if ((error as Error & { code: string }).code === 'PERMISSION_DENIED') {
+      if ((error as Error & { code?: string }).code === 'PERMISSION_DENIED') {
           errorDescription = `Permission denied for ${contextDescription}. Ensure you are a member or have access.`;
       }
       toast({ 
@@ -96,7 +95,7 @@ export function BudgetPlannerClient({ currentRoomId, user }: BudgetPlannerClient
         title: "Sync Error", 
         description: errorDescription
       });
-      setBudgetData(initialBudgetData); // Reset to empty to avoid showing stale data
+      setBudgetData(initialBudgetData); 
       setIsDataLoaded(true); 
     });
 
