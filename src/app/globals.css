@@ -1,3 +1,4 @@
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -108,4 +109,34 @@ body {
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* Toast Progress Bar and Swipe Hint Arrow Styles */
+.toast-progress-bar-fill {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 3px; /* Subtle height */
+  background-color: hsl(var(--primary)); /* Use primary color */
+  animation-name: toast-progress;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+  border-bottom-left-radius: var(--radius); /* Match toast rounding */
+  border-bottom-right-radius: var(--radius); /* Match toast rounding if it fills completely */
+}
+
+@keyframes toast-progress {
+  from { width: 100%; }
+  to { width: 0%; }
+}
+
+.swipe-hint-arrow {
+  /* Base style for vertical centering, animation will handle movement */
+  transform: translateY(-50%);
+  animation: swipe-hint-animation 1.5s ease-in-out infinite;
+}
+
+@keyframes swipe-hint-animation {
+  0%, 100% { transform: translateX(0) translateY(-50%); opacity: 0.6; }
+  50% { transform: translateX(3px) translateY(-50%); opacity: 1; }
 }

@@ -1,9 +1,10 @@
+
 "use client"
 
 import * as React from "react"
 import * as ToastPrimitives from "@radix-ui/react-toast"
 import { cva, type VariantProps } from "class-variance-authority"
-import { X } from "lucide-react"
+import { X, ChevronRight } from "lucide-react" // Added ChevronRight
 
 import { cn } from "@/lib/utils"
 
@@ -43,14 +44,33 @@ const toastVariants = cva(
 const Toast = React.forwardRef<
   React.ElementRef<typeof ToastPrimitives.Root>,
   React.ComponentPropsWithoutRef<typeof ToastPrimitives.Root> &
-    VariantProps<typeof toastVariants>
->(({ className, variant, ...props }, ref) => {
+    VariantProps<typeof toastVariants> & { duration?: number } // Added duration prop
+>(({ className, variant, children, duration, ...props }, ref) => {
   return (
     <ToastPrimitives.Root
       ref={ref}
       className={cn(toastVariants({ variant }), className)}
       {...props}
-    />
+    >
+      {children} {/* Title, desc, action, close button are rendered here by Toaster */}
+
+      {/* Swipe Hint Arrow - only for toasts with duration */}
+      {duration && (
+        <ChevronRight
+          aria-hidden="true"
+          className="swipe-hint-arrow pointer-events-none absolute left-3 top-1/2 h-5 w-5 text-foreground/60"
+        />
+      )}
+
+      {/* Progress Bar - only for toasts with duration */}
+      {duration && (
+        <div
+          aria-hidden="true"
+          className="toast-progress-bar-fill"
+          style={{ animationDuration: `${duration / 1000}s` }}
+        />
+      )}
+    </ToastPrimitives.Root>
   )
 })
 Toast.displayName = ToastPrimitives.Root.displayName
