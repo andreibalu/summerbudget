@@ -39,10 +39,10 @@ export function BalanceDisplay({ incomes, spendings, monthName, carryOverDetails
           </div>
           <span className="font-semibold text-green-600">{effectiveTotalIncome.toFixed(2)} RON</span>
         </div>
-        {carryOverDetails.amount > 0 && carryOverDetails.previousMonthName && (
+        {carryOverDetails.amount > 0 && (
           <p className="text-xs text-center text-muted-foreground -mt-2">
             (Includes {carryOverDetails.amount.toFixed(2)} RON carried over
-            {currentMonthIndex === 1 ? ` from ${carryOverDetails.previousMonthName}` : " from previous months"})
+            {currentMonthIndex === 0 ? '' : (currentMonthIndex === 1 && carryOverDetails.previousMonthName ? ` from ${carryOverDetails.previousMonthName}` : " from previous months")})
           </p>
         )}
         <div className="flex justify-between items-center p-3 bg-red-500/10 rounded-lg">
@@ -57,7 +57,7 @@ export function BalanceDisplay({ incomes, spendings, monthName, carryOverDetails
             <Wallet className={`h-6 w-6 mr-2 ${balance >= 0 ? 'text-primary' : 'text-destructive'}`} />
             <span className="text-lg font-bold">Remaining Balance</span>
           </div>
-          <span className={`text-xl font-bold ${balance >= 0 ? 'text-primary' : 'text-destructive'}`}>
+          <span className={`text-2xl font-extrabold ${balance >= 0 ? 'text-primary' : 'text-destructive'}`}>
             {balance.toFixed(2)} RON
           </span>
         </div>
