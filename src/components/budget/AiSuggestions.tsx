@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState } from "react";
@@ -36,10 +37,7 @@ export function AiSuggestions({ monthData, onFinancialGoalChange }: AiSuggestion
     try {
       const result = await getSpendingRecommendations(aiInput);
       setRecommendations(result.recommendations);
-      toast({
-        title: "AI Suggestions Loaded",
-        description: "Here are some tips to optimize your budget.",
-      });
+      // Success toast removed: toast({ title: "AI Suggestions Loaded", ... });
     } catch (error) {
       console.error("Error fetching AI suggestions:", error);
       toast({

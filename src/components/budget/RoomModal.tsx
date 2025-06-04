@@ -21,10 +21,10 @@ import { useAuth } from '@/context/AuthContext';
 interface RoomModalProps {
   isOpen: boolean;
   currentRoomId: string | null;
-  currentRoomName: string | null; // Added to display current room name if any
+  currentRoomName: string | null;
   userHasActiveOwnedRoom: boolean;
   onClose: () => void;
-  onCreateRoom: (roomName: string) => Promise<string>; // Modified to accept roomName
+  onCreateRoom: (roomName: string) => Promise<string>;
   onJoinRoom: (roomId: string) => Promise<void>;
   onLeaveRoom: () => Promise<void>;
   isLoading: boolean;
@@ -42,14 +42,13 @@ export function RoomModal({
   isLoading
 }: RoomModalProps) {
   const [joinRoomIdInput, setJoinRoomIdInput] = useState('');
-  const [newRoomNameInput, setNewRoomNameInput] = useState(''); // State for new room name
+  const [newRoomNameInput, setNewRoomNameInput] = useState('');
   const { toast } = useToast();
   const { user } = useAuth();
 
   useEffect(() => {
-    // Reset new room name input when modal opens/closes or currentRoomId changes
     if (isOpen) {
-      setNewRoomNameInput(currentRoomId ? (currentRoomName || '') : ''); // Pre-fill if editing, clear if creating
+      setNewRoomNameInput(currentRoomId ? (currentRoomName || '') : '');
     } else {
       setNewRoomNameInput('');
     }
@@ -65,7 +64,7 @@ export function RoomModal({
       return;
     }
     await onCreateRoom(newRoomNameInput.trim());
-    setNewRoomNameInput(''); // Clear input after creation attempt
+    setNewRoomNameInput('');
   };
 
   const handleJoinRoomClick = async () => {
@@ -89,7 +88,7 @@ export function RoomModal({
   const handleCopyToClipboard = () => {
     if (currentRoomId) {
       navigator.clipboard.writeText(currentRoomId).then(() => {
-        toast({ title: "Room Code Copied!", description: "You can now share it." });
+        // Success toast removed: toast({ title: "Room Code Copied!", ... });
       }).catch(err => {
         toast({ variant: "destructive", title: "Copy Failed", description: "Could not copy room code." });
         console.error('Failed to copy room code: ', err);
@@ -103,7 +102,7 @@ export function RoomModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open) => {
-      if (!open) setNewRoomNameInput(''); // Clear name input when closing dialog
+      if (!open) setNewRoomNameInput('');
       onClose();
     }}>
       <DialogContent className="sm:max-w-md">
@@ -129,7 +128,6 @@ export function RoomModal({
                   <span className="sr-only">Copy Room Code</span>
                 </Button>
               </div>
-              {/* Room renaming could be added here later */}
               <Button onClick={onLeaveRoom} variant="destructive" className="w-full mt-4" disabled={isLoading}>
                 {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Switch to Personal Mode & Leave Room

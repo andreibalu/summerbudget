@@ -10,12 +10,12 @@ import { ref as dbRef, onValue, set as firebaseSet, off, get } from "firebase/da
 import { useToast } from "@/hooks/use-toast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
-import type { User } from "firebase/auth"; // Import User type
+import type { User } from "firebase/auth";
 import { Loader2 } from "lucide-react";
 
 interface BudgetPlannerClientProps {
   currentRoomId: string | null;
-  user: User; // Add user prop
+  user: User;
 }
 
 export interface CarryOverDetails {
@@ -42,22 +42,24 @@ export function BudgetPlannerClient({ currentRoomId, user }: BudgetPlannerClient
 
 
   useEffect(() => {
-    if (!db || !user?.uid) { 
+    if (!db || !user?.uid) {
       if (user?.uid && !db) {
         toast({ variant: "destructive", title: "Database Error", description: "Realtime Database not connected. Sync disabled." });
       }
+      setIsDataLoaded(true); // Allow UI to render with initial (empty) data
+      setBudgetData(initialBudgetData); // Reset to initial state if no path/db
       return;
     }
 
     const dataPath = getFirebaseDataPath();
     if (!dataPath) {
-      setBudgetData(initialBudgetData); // Reset if path is invalid (e.g., user logged out while in room view)
+      setBudgetData(initialBudgetData);
       setIsDataLoaded(true);
       return;
     }
     
     const dataRef = dbRef(db, dataPath);
-    setIsDataLoaded(false); 
+    setIsDataLoaded(false);
 
     const listener = onValue(dataRef, (snapshot) => {
       let dataToSet: BudgetData;
@@ -71,14 +73,12 @@ export function BudgetPlannerClient({ currentRoomId, user }: BudgetPlannerClient
           return acc;
         }, {} as BudgetData);
 
-        if (!isDataLoaded) { 
-          toast({ title: "Data Synced", description: currentRoomId ? `Budget loaded from room ${currentRoomId}.` : "Personal budget loaded." });
-        }
+        // Success toast removed: if (!isDataLoaded) { toast({ title: "Data Synced", ...}) }
       } else {
         dataToSet = JSON.parse(JSON.stringify(initialBudgetData));
         firebaseSet(dataRef, dataToSet)
           .then(() => {
-            toast({ title: currentRoomId ? "Room Initialized" : "Personal Budget Initialized", description: currentRoomId ? `New room ${currentRoomId} created.` : "Your personal budget area is ready." });
+            // Success toast removed: toast({ title: currentRoomId ? "Room Initialized" : "Personal Budget Initialized", ... });
           })
           .catch(error => {
             console.error("Failed to initialize data in Firebase:", error);
@@ -95,17 +95,14 @@ export function BudgetPlannerClient({ currentRoomId, user }: BudgetPlannerClient
         title: "Sync Error", 
         description: `Could not load data for ${contextDescription}. Details: ${error.message}` 
       });
-      setBudgetData(initialBudgetData); // Reset data to prevent showing stale info
+      setBudgetData(initialBudgetData);
       setIsDataLoaded(true); 
     });
 
     return () => {
       off(dataRef, "value", listener);
-      // Do not reset isDataLoaded to false here on cleanup immediately,
-      // as it might cause layout shifts if path changes quickly.
-      // It's reset at the start of the effect for the new path.
     };
-  }, [currentRoomId, user, toast, getFirebaseDataPath]); // Removed isDataLoaded from deps to avoid re-triggering excessively on initial load toast. isDataLoaded used internally now.
+  }, [currentRoomId, user, toast, getFirebaseDataPath]);
 
 
   useEffect(() => {
@@ -114,15 +111,12 @@ export function BudgetPlannerClient({ currentRoomId, user }: BudgetPlannerClient
     const dataPath = getFirebaseDataPath();
     if (!dataPath) return;
 
-    // Avoid writing initialBudgetData if it's just been reset due to an error or path change
-    // This check ensures we only write "real" data changes.
     if (JSON.stringify(budgetData) === JSON.stringify(initialBudgetData)) {
         const dataRefForCheck = dbRef(db, dataPath);
         get(dataRefForCheck).then(snapshot => {
             if (!snapshot.exists()) {
                  firebaseSet(dbRef(db, dataPath), budgetData).catch(error => {
                     console.error("Failed to sync initial data to Firebase:", error);
-                    // Potentially a less intrusive toast here or just log
                  });
             }
         });
@@ -192,7 +186,6 @@ export function BudgetPlannerClient({ currentRoomId, user }: BudgetPlannerClient
   ) => {
     setBudgetData((prevData) => {
       const newTransaction: Transaction = { ...transaction, id: crypto.randomUUID() };
-      // Ensure prevData is not empty or undefined, fallback to initial if necessary
       const safePrevData = Object.keys(prevData || {}).length > 0 ? prevData : initialBudgetData;
       const currentMonthData = safePrevData[month] ? { ...safePrevData[month] } : { ...initialBudgetData[month] };
       
@@ -259,7 +252,7 @@ export function BudgetPlannerClient({ currentRoomId, user }: BudgetPlannerClient
       </div>
 
       <MonthView
-        key={activeMonth + (currentRoomId || user.uid)} // Add key to force re-render on context change
+        key={activeMonth + (currentRoomId || user.uid)}
         monthKey={activeMonth}
         data={budgetData[activeMonth] || { ...initialBudgetData[activeMonth] }} 
         onAddTransaction={handleAddTransaction}
@@ -270,4 +263,3 @@ export function BudgetPlannerClient({ currentRoomId, user }: BudgetPlannerClient
     </div>
   );
 }
-
