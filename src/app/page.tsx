@@ -82,6 +82,13 @@ export default function BudgetPlannerPage() {
         try {
           const snapshot = await get(roomRef);
           if (snapshot.exists()) {
+            // Before switching, ensure user is a member (they should be if it's their owned room and created correctly)
+            const membersRef = ref(db, `rooms/${userOwnedRoomId}/members/${user.uid}`);
+            const memberSnapshot = await get(membersRef);
+            if (!memberSnapshot.exists() || memberSnapshot.val() !== true) {
+              // If for some reason they are not a member, add them (e.g., data inconsistency or old room)
+              await firebaseSet(membersRef, true);
+            }
             setCurrentRoomId(userOwnedRoomId);
             toast({ title: "Switched to Your Room", description: `You are now in room: ${userOwnedRoomId}.` });
           } else {
@@ -116,7 +123,7 @@ export default function BudgetPlannerPage() {
     const newRoomData = {
       budgetData: initialBudgetData,
       meta: { createdBy: user.uid, createdAt: serverTimestamp() },
-      members: { [user.uid]: true }
+      members: { [user.uid]: true } // Ensure creator is added as a member
     };
     
     try {
@@ -152,7 +159,7 @@ export default function BudgetPlannerPage() {
       const snapshot = await get(roomRef);
       if (snapshot.exists()) {
         const membersRef = ref(db, `rooms/${upperRoomId}/members/${user.uid}`);
-        await firebaseSet(membersRef, true);
+        await firebaseSet(membersRef, true); // Add current user to members list
         setCurrentRoomId(upperRoomId);
         setShowRoomModal(false);
         toast({ title: "Joined Room", description: `Switched to room: ${upperRoomId}.` });
@@ -169,12 +176,11 @@ export default function BudgetPlannerPage() {
 
   const handleLeaveRoom = async () => {
     if (!db || !user || !currentRoomId) {
-      // No current room to leave, or user/db not available. This might be called when already in personal mode.
-      if(currentRoomId) { // Only toast if there was a room to leave
+      if(currentRoomId) { 
          toast({ variant: "destructive", title: "Error", description: "Cannot leave room. Missing required info." });
       }
-      setCurrentRoomId(null); // Ensure user is in personal mode
-      setShowRoomModal(false); // Close modal if open
+      setCurrentRoomId(null); 
+      setShowRoomModal(false); 
       setIsLoadingRoomAction(false);
       return;
     }
@@ -182,21 +188,26 @@ export default function BudgetPlannerPage() {
     const roomToLeaveId = currentRoomId;
     
     try {
+      // Remove user from the room's members list
       await firebaseRemove(ref(db, `rooms/${roomToLeaveId}/members/${user.uid}`));
       
+      // Check if the room is now empty
       const membersRef = ref(db, `rooms/${roomToLeaveId}/members`);
       const membersSnapshot = await get(membersRef);
       
       let isRoomEmpty = true;
       if (membersSnapshot.exists() && membersSnapshot.val() !== null) {
-        if (Object.keys(membersSnapshot.val()).length > 0) {
+        const currentMembers = membersSnapshot.val();
+        if (Object.keys(currentMembers).length > 0) {
           isRoomEmpty = false;
         }
       }
 
       if (isRoomEmpty) {
+        // If room is empty, delete the room
         await firebaseRemove(ref(db, `rooms/${roomToLeaveId}`));
         toast({ title: "Room Left & Deleted", description: `Room ${roomToLeaveId} was empty and has been deleted.` });
+        // If this was the user's owned room, clear their ownership reference
         if (userOwnedRoomId === roomToLeaveId) {
           await firebaseRemove(ref(db, `users/${user.uid}/createdRoomId`));
           setUserOwnedRoomId(null);
@@ -205,7 +216,7 @@ export default function BudgetPlannerPage() {
         toast({ title: "Room Left", description: `You have left room ${roomToLeaveId}. Switched to Personal Mode.` });
       }
 
-      setCurrentRoomId(null); 
+      setCurrentRoomId(null); // Switch to personal mode
       setShowRoomModal(false); 
 
     } catch (error) {
@@ -291,4 +302,4 @@ export default function BudgetPlannerPage() {
     </main>
   );
 }
-
+    
