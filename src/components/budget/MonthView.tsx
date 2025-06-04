@@ -43,22 +43,28 @@ export function MonthView({
       <BalanceDisplay incomes={data.incomes} spendings={data.spendings} monthName={monthKey} />
 
       <div className="grid md:grid-cols-2 gap-6">
-        <Card className="shadow-sm">
-          <CardContent className="pt-6">
-            <h3 className="text-xl font-semibold mb-4 font-headline">Add Income</h3>
-            <TransactionForm type="income" onSubmit={handleAddIncome} />
-          </CardContent>
-        </Card>
-        <Card className="shadow-sm">
-          <CardContent className="pt-6">
-            <h3 className="text-xl font-semibold mb-4 font-headline">Add Spending</h3>
-            <TransactionForm type="spending" onSubmit={handleAddSpending} />
-          </CardContent>
-        </Card>
+        {/* Left Column: Income */}
+        <div className="space-y-6">
+          <Card className="shadow-sm">
+            <CardContent className="pt-6">
+              <h3 className="text-xl font-semibold mb-4 font-headline">Add Income</h3>
+              <TransactionForm type="income" onSubmit={handleAddIncome} />
+            </CardContent>
+          </Card>
+          <TransactionList transactions={data.incomes} type="income" onDelete={handleDeleteIncome} />
+        </div>
+
+        {/* Right Column: Spending */}
+        <div className="space-y-6">
+          <Card className="shadow-sm">
+            <CardContent className="pt-6">
+              <h3 className="text-xl font-semibold mb-4 font-headline">Add Spending</h3>
+              <TransactionForm type="spending" onSubmit={handleAddSpending} />
+            </CardContent>
+          </Card>
+          <TransactionList transactions={data.spendings} type="spending" onDelete={handleDeleteSpending} />
+        </div>
       </div>
-      
-      <TransactionList transactions={data.incomes} type="income" onDelete={handleDeleteIncome} />
-      <TransactionList transactions={data.spendings} type="spending" onDelete={handleDeleteSpending} />
     </div>
   );
 }
