@@ -4,6 +4,7 @@
 import React from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import type { Transaction, MonthKey } from "@/lib/types";
+import { MONTHS } from "@/lib/types"; // Import MONTHS
 import { DollarSign, TrendingDown, TrendingUp, Wallet } from "lucide-react";
 import type { CarryOverDetails } from "./BudgetPlannerClient";
 
@@ -20,6 +21,8 @@ export function BalanceDisplay({ incomes, spendings, monthName, carryOverDetails
   
   const effectiveTotalIncome = userTotalIncome + (carryOverDetails.amount > 0 ? carryOverDetails.amount : 0);
   const balance = effectiveTotalIncome - totalSpendings;
+
+  const currentMonthIndex = MONTHS.indexOf(monthName as MonthKey);
 
   return (
     <Card className="my-6 shadow-md">
@@ -38,7 +41,8 @@ export function BalanceDisplay({ incomes, spendings, monthName, carryOverDetails
         </div>
         {carryOverDetails.amount > 0 && carryOverDetails.previousMonthName && (
           <p className="text-xs text-center text-muted-foreground -mt-2">
-            (Includes {carryOverDetails.amount.toFixed(2)} RON carried over from {carryOverDetails.previousMonthName})
+            (Includes {carryOverDetails.amount.toFixed(2)} RON carried over
+            {currentMonthIndex === 1 ? ` from ${carryOverDetails.previousMonthName}` : " from previous months"})
           </p>
         )}
         <div className="flex justify-between items-center p-3 bg-red-500/10 rounded-lg">

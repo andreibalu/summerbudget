@@ -46,7 +46,6 @@ export function BudgetPlannerClient({ currentRoomId }: BudgetPlannerClientProps)
     return null;
   }, [userId]);
 
-  // Effect for Firebase RTDB connection and data loading/syncing
   useEffect(() => {
     if (!isClient || (currentRoomId && !db)) {
       if (isClient && currentRoomId && !db) {
@@ -65,7 +64,7 @@ export function BudgetPlannerClient({ currentRoomId }: BudgetPlannerClientProps)
         if (snapshot.exists()) {
           const dataFromDB = snapshot.val();
           dataToSet = MONTHS.reduce((acc, month) => {
-            acc[month] = dataFromDB[month] || { ...initialBudgetData[month] }; // Ensure fresh object for safety
+            acc[month] = dataFromDB[month] || { ...initialBudgetData[month] }; 
             acc[month].incomes = acc[month].incomes ? [...acc[month].incomes] : [];
             acc[month].spendings = acc[month].spendings ? [...acc[month].spendings] : [];
             return acc;
@@ -74,7 +73,7 @@ export function BudgetPlannerClient({ currentRoomId }: BudgetPlannerClientProps)
              toast({ title: "Data Synced", description: `Budget data loaded from room ${currentRoomId}.` });
           }
         } else {
-          dataToSet = JSON.parse(JSON.stringify(initialBudgetData)); // Deep copy
+          dataToSet = JSON.parse(JSON.stringify(initialBudgetData)); 
           firebaseSet(roomBudgetDataRef, dataToSet)
             .then(() => {
                toast({ title: "Room Initialized", description: `New room ${currentRoomId} created in the cloud.` });
@@ -93,7 +92,6 @@ export function BudgetPlannerClient({ currentRoomId }: BudgetPlannerClientProps)
       });
       unsubscribe = () => off(roomBudgetDataRef, "value", listener);
     } else {
-      // Personal mode: Load from localStorage
       setIsDataLoadedFromDB(false);
       const personalKey = getPersonalStorageKey();
       if (personalKey) {
@@ -129,19 +127,16 @@ export function BudgetPlannerClient({ currentRoomId }: BudgetPlannerClientProps)
   }, [isClient, currentRoomId, userId, toast, getPersonalStorageKey]);
 
 
-  // Effect to save budget data (to RTDB for rooms, to localStorage for personal)
   useEffect(() => {
-    if (!isClient || !budgetData) return; // Ensure budgetData is initialized
+    if (!isClient || !budgetData) return; 
 
-    // Debounce or selective save might be needed for high-frequency updates
-    if (currentRoomId && db && isDataLoadedFromDB) { // Only save if data loaded from DB
+    if (currentRoomId && db && isDataLoadedFromDB) { 
       const roomBudgetDataRef = dbRef(db, `rooms/${currentRoomId}/budgetData`);
       firebaseSet(roomBudgetDataRef, budgetData).catch(error => {
         console.error("Failed to sync data to Firebase:", error);
         toast({ variant: "destructive", title: "Sync Error", description: "Could not save changes to the cloud." });
       });
     } else if (!currentRoomId && userId) {
-      // Personal mode: save to localStorage
       const personalKey = getPersonalStorageKey();
       if (personalKey) {
         localStorage.setItem(personalKey, JSON.stringify(budgetData));
@@ -149,33 +144,49 @@ export function BudgetPlannerClient({ currentRoomId }: BudgetPlannerClientProps)
     }
   }, [budgetData, isClient, currentRoomId, userId, db, toast, isDataLoadedFromDB, getPersonalStorageKey]);
 
-
-  const calculateMonthBalance = (monthData: MonthData): number => {
+  const calculateIntrinsicMonthBalance = useCallback((monthData: MonthData | undefined): number => {
+    if (!monthData) return 0;
     const totalIncome = (monthData.incomes || []).reduce((sum, item) => sum + item.amount, 0);
     const totalSpendings = (monthData.spendings || []).reduce((sum, item) => sum + item.amount, 0);
     return totalIncome - totalSpendings;
-  };
+  }, []);
+
+  const calculateAccumulatedSurplusBeforeMonth = useCallback((targetMonthKey: MonthKey, currentBudgetData: BudgetData): number => {
+    let cumulativeSurplus = 0;
+    const targetMonthIndex = MONTHS.indexOf(targetMonthKey);
+
+    if (targetMonthIndex === -1) return 0; 
+
+    for (let i = 0; i < targetMonthIndex; i++) { 
+        const month = MONTHS[i];
+        const monthData = currentBudgetData[month];
+        const intrinsicBalanceThisMonth = calculateIntrinsicMonthBalance(monthData);
+        
+        cumulativeSurplus += intrinsicBalanceThisMonth;
+        
+        if (cumulativeSurplus < 0) {
+            cumulativeSurplus = 0;
+        }
+    }
+    return cumulativeSurplus; 
+  }, [calculateIntrinsicMonthBalance]);
 
   useEffect(() => {
-    if (!budgetData) return;
+    if (!budgetData || !isClient) return;
 
     const currentMonthIndex = MONTHS.indexOf(activeMonth);
     if (currentMonthIndex > 0) {
-      const previousMonthKey = MONTHS[currentMonthIndex - 1];
-      const previousMonthData = budgetData[previousMonthKey];
-      if (previousMonthData) {
-        const previousMonthBalance = calculateMonthBalance(previousMonthData);
+        const previousMonthKey = MONTHS[currentMonthIndex - 1];
+        const accumulatedAmount = calculateAccumulatedSurplusBeforeMonth(activeMonth, budgetData);
+        
         setCarryOverDetails({
-          amount: previousMonthBalance > 0 ? previousMonthBalance : 0,
-          previousMonthName: previousMonthKey,
+            amount: accumulatedAmount, 
+            previousMonthName: previousMonthKey,
         });
-      } else {
-        setCarryOverDetails({ amount: 0, previousMonthName: null });
-      }
     } else {
-      setCarryOverDetails({ amount: 0, previousMonthName: null }); // For June
+        setCarryOverDetails({ amount: 0, previousMonthName: null }); 
     }
-  }, [activeMonth, budgetData]);
+  }, [activeMonth, budgetData, isClient, calculateAccumulatedSurplusBeforeMonth]);
 
 
   const handleAddTransaction = (
@@ -240,7 +251,7 @@ export function BudgetPlannerClient({ currentRoomId }: BudgetPlannerClientProps)
       </div>
 
       <MonthView
-        key={activeMonth} // Important to re-mount MonthView when month changes if it has internal state dependent on month
+        key={activeMonth} 
         monthKey={activeMonth}
         data={budgetData[activeMonth] || { incomes: [], spendings: [] }} 
         onAddTransaction={handleAddTransaction}
