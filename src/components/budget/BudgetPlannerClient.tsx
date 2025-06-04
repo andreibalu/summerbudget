@@ -34,6 +34,9 @@ export function BudgetPlannerClient() {
           // Ensure all months are present, merging with initialBudgetData if necessary
           const completeData = MONTHS.reduce((acc, month) => {
             acc[month] = parsedData[month] || initialBudgetData[month];
+            // Ensure incomes and spendings arrays exist
+            acc[month].incomes = acc[month].incomes || [];
+            acc[month].spendings = acc[month].spendings || [];
             return acc;
           }, {} as BudgetData);
           setBudgetData(completeData);
@@ -63,7 +66,7 @@ export function BudgetPlannerClient() {
   ) => {
     setBudgetData((prevData) => {
       const newTransaction: Transaction = { ...transaction, id: crypto.randomUUID() };
-      const updatedMonthData = { ...(prevData[month] || initialBudgetData[month]) }; // Ensure month data exists
+      const updatedMonthData = { ...(prevData[month] || initialBudgetData[month]) }; 
       if (type === "income") {
         updatedMonthData.incomes = [...updatedMonthData.incomes, newTransaction];
       } else {
@@ -79,7 +82,7 @@ export function BudgetPlannerClient() {
     id: string
   ) => {
     setBudgetData((prevData) => {
-      const updatedMonthData = { ...(prevData[month] || initialBudgetData[month]) }; // Ensure month data exists
+      const updatedMonthData = { ...(prevData[month] || initialBudgetData[month]) }; 
       if (type === "income") {
         updatedMonthData.incomes = updatedMonthData.incomes.filter((t) => t.id !== id);
       } else {
@@ -89,18 +92,7 @@ export function BudgetPlannerClient() {
     });
   };
   
-  const handleUpdateFinancialGoal = (month: MonthKey, goal: string) => {
-    setBudgetData((prevData) => ({
-      ...prevData,
-      [month]: {
-        ...(prevData[month] || initialBudgetData[month]), // Ensure month data exists
-        financialGoal: goal,
-      },
-    }));
-  };
-
   if (!isClient || !userId) {
-    // Render nothing or a loading indicator on the server, before hydration, or before userId is set
     return null; 
   }
 
@@ -117,10 +109,9 @@ export function BudgetPlannerClient() {
         <TabsContent key={month} value={month}>
           <MonthView
             monthKey={month}
-            data={budgetData[month] || initialBudgetData[month]} // Ensure data passed to MonthView is always valid
+            data={budgetData[month] || initialBudgetData[month]} 
             onAddTransaction={handleAddTransaction}
             onDeleteTransaction={handleDeleteTransaction}
-            onUpdateFinancialGoal={handleUpdateFinancialGoal}
           />
         </TabsContent>
       ))}

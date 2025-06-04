@@ -1,3 +1,4 @@
+
 "use client";
 
 import React from "react";
@@ -5,7 +6,6 @@ import type { MonthData, MonthKey, Transaction } from "@/lib/types";
 import { TransactionForm } from "./TransactionForm";
 import { TransactionList } from "./TransactionList";
 import { BalanceDisplay } from "./BalanceDisplay";
-import { AiSuggestions } from "./AiSuggestions";
 import { Card, CardContent } from "@/components/ui/card";
 
 interface MonthViewProps {
@@ -13,7 +13,6 @@ interface MonthViewProps {
   data: MonthData;
   onAddTransaction: (month: MonthKey, type: "income" | "spending", transaction: Omit<Transaction, "id">) => void;
   onDeleteTransaction: (month: MonthKey, type: "income" | "spending", id: string) => void;
-  onUpdateFinancialGoal: (month: MonthKey, goal: string) => void;
 }
 
 export function MonthView({
@@ -21,7 +20,6 @@ export function MonthView({
   data,
   onAddTransaction,
   onDeleteTransaction,
-  onUpdateFinancialGoal,
 }: MonthViewProps) {
   
   const handleAddIncome = (income: Omit<Transaction, "id">) => {
@@ -38,10 +36,6 @@ export function MonthView({
 
   const handleDeleteSpending = (id: string) => {
     onDeleteTransaction(monthKey, "spending", id);
-  };
-
-  const handleFinancialGoalChange = (goal: string) => {
-    onUpdateFinancialGoal(monthKey, goal);
   };
 
   return (
@@ -65,8 +59,6 @@ export function MonthView({
       
       <TransactionList transactions={data.incomes} type="income" onDelete={handleDeleteIncome} />
       <TransactionList transactions={data.spendings} type="spending" onDelete={handleDeleteSpending} />
-      
-      <AiSuggestions monthData={data} onFinancialGoalChange={handleFinancialGoalChange} />
     </div>
   );
 }
