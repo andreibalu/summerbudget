@@ -73,12 +73,6 @@ export default function BudgetPlannerPage() {
           {currentRoomId && (
             <CardDescription className="text-center mt-2 text-sm text-muted-foreground">
               Active Room Code: <span className="font-semibold text-accent select-all">{currentRoomId}</span>
-              <p className="text-xs italic mt-1"> (Changes are saved to this room ID in your browser. Share this code for others to join the same "room" in their browser. Data is not synced in real-time.)</p>
-            </CardDescription>
-          )}
-           {!currentRoomId && (
-            <CardDescription className="text-center mt-2 text-sm text-muted-foreground">
-              You are in Personal Mode. Your data is saved only to this browser.
             </CardDescription>
           )}
         </CardHeader>
