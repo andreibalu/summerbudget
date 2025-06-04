@@ -4,7 +4,7 @@
 import * as React from "react"
 import * as ToastPrimitives from "@radix-ui/react-toast"
 import { cva, type VariantProps } from "class-variance-authority"
-import { X, ChevronLeft } from "lucide-react" // Changed ChevronRight to ChevronLeft
+import { X } from "lucide-react" 
 
 import { cn } from "@/lib/utils"
 
@@ -56,10 +56,18 @@ const Toast = React.forwardRef<
 
       {/* Swipe Hint Arrow - only for toasts with duration */}
       {duration && (
-        <ChevronLeft // Changed to ChevronLeft
-          aria-hidden="true"
-          className="swipe-hint-arrow pointer-events-none absolute right-3 top-1/2 h-5 w-5 text-foreground/60" // Changed left-3 to right-3
-        />
+         <svg 
+            width="30" 
+            height="20" 
+            viewBox="0 0 30 20" 
+            fill="none" 
+            xmlns="http://www.w3.org/2000/svg" 
+            aria-hidden="true" 
+            className="swipe-hint-arrow pointer-events-none absolute right-3 top-1/2 h-5 w-[30px] text-foreground/60"
+          >
+            <path d="M2 10H20" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+            <path d="M18 3L25 10L18 17" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+        </svg>
       )}
 
       {/* Progress Bar - only for toasts with duration */}
@@ -147,3 +155,4 @@ export {
   ToastClose,
   ToastAction,
 }
+

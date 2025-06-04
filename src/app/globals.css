@@ -140,3 +140,4 @@ body {
   0%, 100% { transform: translateX(0) translateY(-50%); opacity: 0.6; }
   50% { transform: translateX(3px) translateY(-50%); opacity: 1; } /* Arrow on right pulses right */
 }
+
