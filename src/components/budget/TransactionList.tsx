@@ -1,3 +1,4 @@
+
 "use client";
 
 import React from "react";
@@ -48,7 +49,7 @@ export function TransactionList({ transactions, type, onDelete }: TransactionLis
               <div>
                 <p className="font-medium">{transaction.description}</p>
                 <p className={`text-sm ${type === "income" ? "text-green-600" : "text-red-600"}`}>
-                  {type === "income" ? "+" : "-"} ${transaction.amount.toFixed(2)}
+                  {type === "income" ? "+" : "-"} {transaction.amount.toFixed(2)} RON
                 </p>
               </div>
               <Button

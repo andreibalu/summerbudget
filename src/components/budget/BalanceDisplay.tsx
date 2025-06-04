@@ -1,3 +1,4 @@
+
 "use client";
 
 import React from "react";
@@ -26,14 +27,14 @@ export function BalanceDisplay({ incomes, spendings }: BalanceDisplayProps) {
             <TrendingUp className="h-5 w-5 mr-2 text-green-600" />
             <span className="font-medium">Total Income</span>
           </div>
-          <span className="font-semibold text-green-600">${totalIncome.toFixed(2)}</span>
+          <span className="font-semibold text-green-600">{totalIncome.toFixed(2)} RON</span>
         </div>
         <div className="flex justify-between items-center p-3 bg-red-500/10 rounded-lg">
           <div className="flex items-center">
             <TrendingDown className="h-5 w-5 mr-2 text-red-600" />
             <span className="font-medium">Total Spendings</span>
           </div>
-          <span className="font-semibold text-red-600">${totalSpendings.toFixed(2)}</span>
+          <span className="font-semibold text-red-600">{totalSpendings.toFixed(2)} RON</span>
         </div>
         <div className={`flex justify-between items-center p-4 rounded-lg shadow-inner ${balance >= 0 ? 'bg-primary/20' : 'bg-destructive/20'}`}>
           <div className="flex items-center">
@@ -41,7 +42,7 @@ export function BalanceDisplay({ incomes, spendings }: BalanceDisplayProps) {
             <span className="text-lg font-bold">Remaining Balance</span>
           </div>
           <span className={`text-xl font-bold ${balance >= 0 ? 'text-primary' : 'text-destructive'}`}>
-            ${balance.toFixed(2)}
+            {balance.toFixed(2)} RON
           </span>
         </div>
       </CardContent>
