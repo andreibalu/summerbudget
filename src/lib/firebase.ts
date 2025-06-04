@@ -1,6 +1,7 @@
 
 import { initializeApp, getApp, getApps, type FirebaseApp } from "firebase/app";
 import { getDatabase, type Database } from "firebase/database";
+import { getAuth, type Auth } from "firebase/auth"; // Import getAuth
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -14,6 +15,7 @@ const firebaseConfig = {
 
 let firebaseApp: FirebaseApp;
 let db: Database | null = null;
+let auth: Auth | null = null; // Declare auth
 
 if (typeof window !== "undefined") { // Ensure Firebase is initialized only on the client-side
   if (!getApps().length) {
@@ -21,8 +23,6 @@ if (typeof window !== "undefined") { // Ensure Firebase is initialized only on t
       firebaseApp = initializeApp(firebaseConfig);
     } catch (error) {
       console.error("Firebase initialization error:", error);
-      // In case of error, firebaseApp remains uninitialized or could be a dummy
-      // to prevent further crashes if not handled properly.
     }
   } else {
     firebaseApp = getApp();
@@ -31,13 +31,14 @@ if (typeof window !== "undefined") { // Ensure Firebase is initialized only on t
   if (firebaseApp! && firebaseApp.options?.projectId) {
     try {
       db = getDatabase(firebaseApp);
+      auth = getAuth(firebaseApp); // Initialize auth
     } catch (error) {
-      console.error("Firebase Database initialization error:", error);
+      console.error("Firebase Database/Auth initialization error:", error);
     }
   } else {
-    console.warn("Firebase app not fully configured or projectId is missing. Realtime Database might not work.");
+    console.warn("Firebase app not fully configured or projectId is missing. Realtime Database/Auth might not work.");
   }
 }
 
 
-export { firebaseApp, db };
+export { firebaseApp, db, auth }; // Export auth

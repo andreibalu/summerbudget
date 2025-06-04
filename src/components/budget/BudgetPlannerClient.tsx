@@ -2,17 +2,19 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { initialBudgetData, MONTHS, USER_ID_STORAGE_KEY, BUDGET_DATA_STORAGE_KEY_PREFIX } from "@/lib/types";
+import { initialBudgetData, MONTHS } from "@/lib/types";
 import type { BudgetData, MonthKey, Transaction, MonthData } from "@/lib/types";
 import { MonthView } from "./MonthView";
-import { db } from "@/lib/firebase"; // Firebase RTDB
-import { ref as dbRef, onValue, set as firebaseSet, off } from "firebase/database";
+import { db } from "@/lib/firebase";
+import { ref as dbRef, onValue, set as firebaseSet, off, get } from "firebase/database";
 import { useToast } from "@/hooks/use-toast";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
+import type { User } from "firebase/auth"; // Import User type
 
 interface BudgetPlannerClientProps {
   currentRoomId: string | null;
+  user: User; // Add user prop
 }
 
 export interface CarryOverDetails {
@@ -20,129 +22,96 @@ export interface CarryOverDetails {
   previousMonthName: MonthKey | null;
 }
 
-export function BudgetPlannerClient({ currentRoomId }: BudgetPlannerClientProps) {
+export function BudgetPlannerClient({ currentRoomId, user }: BudgetPlannerClientProps) {
   const [budgetData, setBudgetData] = useState<BudgetData>(initialBudgetData);
-  const [isClient, setIsClient] = useState(false);
-  const [userId, setUserId] = useState<string | null>(null);
+  const [isDataLoaded, setIsDataLoaded] = useState(false);
   const { toast } = useToast();
-  const [isDataLoadedFromDB, setIsDataLoadedFromDB] = useState(false);
   const [activeMonth, setActiveMonth] = useState<MonthKey>(MONTHS[0]);
   const [carryOverDetails, setCarryOverDetails] = useState<CarryOverDetails>({ amount: 0, previousMonthName: null });
 
-  useEffect(() => {
-    setIsClient(true);
-    let id = localStorage.getItem(USER_ID_STORAGE_KEY);
-    if (!id) {
-      id = crypto.randomUUID();
-      localStorage.setItem(USER_ID_STORAGE_KEY, id);
+  // Determine the Firebase path based on whether currentRoomId or user.uid is used
+  const getFirebaseDataPath = useCallback(() => {
+    if (currentRoomId) {
+      return `rooms/${currentRoomId}/budgetData`;
     }
-    setUserId(id);
-  }, []);
-
-  const getPersonalStorageKey = useCallback(() => {
-    if (userId) {
-      return `${BUDGET_DATA_STORAGE_KEY_PREFIX}_user_${userId}`;
+    if (user?.uid) {
+      return `users/${user.uid}/personalBudget`;
     }
     return null;
-  }, [userId]);
+  }, [currentRoomId, user]);
+
 
   useEffect(() => {
-    if (!isClient || (currentRoomId && !db)) {
-      if (isClient && currentRoomId && !db) {
-         toast({ variant: "destructive", title: "Database Error", description: "Realtime Database not connected. Sync disabled." });
+    if (!db || !user?.uid) { // Ensure db and user.uid are available
+      if (user?.uid && !db) {
+        toast({ variant: "destructive", title: "Database Error", description: "Realtime Database not connected. Sync disabled." });
       }
       return;
     }
 
-    let unsubscribe: (() => void) | null = null;
+    const dataPath = getFirebaseDataPath();
+    if (!dataPath) return;
 
-    if (currentRoomId) {
-      setIsDataLoadedFromDB(false);
-      const roomBudgetDataRef = dbRef(db, `rooms/${currentRoomId}/budgetData`);
-      const listener = onValue(roomBudgetDataRef, (snapshot) => {
-        let dataToSet: BudgetData;
-        if (snapshot.exists()) {
-          const dataFromDB = snapshot.val();
-          dataToSet = MONTHS.reduce((acc, month) => {
-            acc[month] = dataFromDB[month] || { ...initialBudgetData[month] }; 
-            acc[month].incomes = acc[month].incomes ? [...acc[month].incomes] : [];
-            acc[month].spendings = acc[month].spendings ? [...acc[month].spendings] : [];
-            return acc;
-          }, {} as BudgetData);
-          if (!isDataLoadedFromDB) {
-             toast({ title: "Data Synced", description: `Budget data loaded from room ${currentRoomId}.` });
-          }
-        } else {
-          dataToSet = JSON.parse(JSON.stringify(initialBudgetData)); 
-          firebaseSet(roomBudgetDataRef, dataToSet)
-            .then(() => {
-               toast({ title: "Room Initialized", description: `New room ${currentRoomId} created in the cloud.` });
-            })
-            .catch(error => {
-              console.error("Failed to initialize room in Firebase:", error);
-              toast({ variant: "destructive", title: "Initialization Error", description: "Could not create room in cloud." });
-            });
-        }
-        setBudgetData(dataToSet);
-        setIsDataLoadedFromDB(true);
-      }, (error) => {
-        console.error("Firebase onValue error:", error);
-        toast({ variant: "destructive", title: "Sync Error", description: "Could not fetch data from cloud." });
-        setIsDataLoadedFromDB(true);
-      });
-      unsubscribe = () => off(roomBudgetDataRef, "value", listener);
-    } else {
-      setIsDataLoadedFromDB(false);
-      const personalKey = getPersonalStorageKey();
-      if (personalKey) {
-        const savedData = localStorage.getItem(personalKey);
-        if (savedData) {
-          try {
-            const parsedData = JSON.parse(savedData);
-            const completeData = MONTHS.reduce((acc, month) => {
-              acc[month] = parsedData[month] || { ...initialBudgetData[month] };
-              acc[month].incomes = acc[month].incomes ? [...acc[month].incomes] : [];
-              acc[month].spendings = acc[month].spendings ? [...acc[month].spendings] : [];
-              return acc;
-            }, {} as BudgetData);
-            setBudgetData(completeData);
-          } catch (error) {
-            console.error("Failed to parse personal budget data:", error);
-            localStorage.removeItem(personalKey);
-            setBudgetData(JSON.parse(JSON.stringify(initialBudgetData)));
-          }
-        } else {
-          setBudgetData(JSON.parse(JSON.stringify(initialBudgetData)));
+    const dataRef = dbRef(db, dataPath);
+    setIsDataLoaded(false); // Reset loading state for new path
+
+    const listener = onValue(dataRef, (snapshot) => {
+      let dataToSet: BudgetData;
+      if (snapshot.exists()) {
+        const dataFromDB = snapshot.val();
+        // Ensure data structure is complete
+        dataToSet = MONTHS.reduce((acc, month) => {
+          acc[month] = dataFromDB[month] || { ...initialBudgetData[month] };
+          acc[month].incomes = acc[month].incomes ? Object.values(dataFromDB[month]?.incomes || {}) : [];
+          acc[month].spendings = acc[month].spendings ? Object.values(dataFromDB[month]?.spendings || {}) : [];
+          acc[month].financialGoal = dataFromDB[month]?.financialGoal || "";
+          return acc;
+        }, {} as BudgetData);
+
+        if (!isDataLoaded) { // Show toast only on initial load or path change
+          toast({ title: "Data Synced", description: currentRoomId ? `Budget loaded from room ${currentRoomId}.` : "Personal budget loaded." });
         }
       } else {
-        setBudgetData(JSON.parse(JSON.stringify(initialBudgetData)));
+        // Data doesn't exist, initialize it
+        dataToSet = JSON.parse(JSON.stringify(initialBudgetData));
+        firebaseSet(dataRef, dataToSet)
+          .then(() => {
+            toast({ title: currentRoomId ? "Room Initialized" : "Personal Budget Initialized", description: currentRoomId ? `New room ${currentRoomId} created.` : "Your personal budget area is ready." });
+          })
+          .catch(error => {
+            console.error("Failed to initialize data in Firebase:", error);
+            toast({ variant: "destructive", title: "Initialization Error", description: "Could not create budget in cloud." });
+          });
       }
-    }
+      setBudgetData(dataToSet);
+      setIsDataLoaded(true);
+    }, (error) => {
+      console.error("Firebase onValue error:", error);
+      toast({ variant: "destructive", title: "Sync Error", description: "Could not fetch data from cloud." });
+      setIsDataLoaded(true); // Set to true to prevent continuous loading state on error
+    });
+
     return () => {
-      if (unsubscribe) {
-        unsubscribe();
-      }
-      setIsDataLoadedFromDB(false);
+      off(dataRef, "value", listener);
+      setIsDataLoaded(false); // Reset on unmount or path change
     };
-  }, [isClient, currentRoomId, userId, toast, getPersonalStorageKey]);
+  }, [currentRoomId, user, toast, getFirebaseDataPath, isDataLoaded]); // Added isDataLoaded to deps for initial toast
 
 
+  // Effect to save data to Firebase when budgetData changes
   useEffect(() => {
-    if (!isClient || !budgetData) return; 
+    if (!db || !user?.uid || !isDataLoaded || !budgetData) return; // Don't save if not loaded or no data
 
-    if (currentRoomId && db && isDataLoadedFromDB) { 
-      const roomBudgetDataRef = dbRef(db, `rooms/${currentRoomId}/budgetData`);
-      firebaseSet(roomBudgetDataRef, budgetData).catch(error => {
-        console.error("Failed to sync data to Firebase:", error);
-        toast({ variant: "destructive", title: "Sync Error", description: "Could not save changes to the cloud." });
-      });
-    } else if (!currentRoomId && userId) {
-      const personalKey = getPersonalStorageKey();
-      if (personalKey) {
-        localStorage.setItem(personalKey, JSON.stringify(budgetData));
-      }
-    }
-  }, [budgetData, isClient, currentRoomId, userId, db, toast, isDataLoadedFromDB, getPersonalStorageKey]);
+    const dataPath = getFirebaseDataPath();
+    if (!dataPath) return;
+
+    const dataRef = dbRef(db, dataPath);
+    firebaseSet(dataRef, budgetData).catch(error => {
+      console.error("Failed to sync data to Firebase:", error);
+      toast({ variant: "destructive", title: "Sync Error", description: "Could not save changes to the cloud." });
+    });
+  }, [budgetData, user, db, toast, isDataLoaded, getFirebaseDataPath]);
+
 
   const calculateIntrinsicMonthBalance = useCallback((monthData: MonthData | undefined): number => {
     if (!monthData) return 0;
@@ -172,7 +141,7 @@ export function BudgetPlannerClient({ currentRoomId }: BudgetPlannerClientProps)
   }, [calculateIntrinsicMonthBalance]);
 
   useEffect(() => {
-    if (!budgetData || !isClient) return;
+    if (!budgetData || !user?.uid) return;
 
     const currentMonthIndex = MONTHS.indexOf(activeMonth);
     if (currentMonthIndex > 0) {
@@ -186,7 +155,7 @@ export function BudgetPlannerClient({ currentRoomId }: BudgetPlannerClientProps)
     } else {
         setCarryOverDetails({ amount: 0, previousMonthName: null }); 
     }
-  }, [activeMonth, budgetData, isClient, calculateAccumulatedSurplusBeforeMonth]);
+  }, [activeMonth, budgetData, user, calculateAccumulatedSurplusBeforeMonth]);
 
 
   const handleAddTransaction = (
@@ -196,7 +165,7 @@ export function BudgetPlannerClient({ currentRoomId }: BudgetPlannerClientProps)
   ) => {
     setBudgetData((prevData) => {
       const newTransaction: Transaction = { ...transaction, id: crypto.randomUUID() };
-      const currentMonthData = prevData[month] ? { ...prevData[month] } : { incomes: [], spendings: []};
+      const currentMonthData = prevData[month] ? { ...prevData[month] } : { incomes: [], spendings: [], financialGoal: "" };
       
       if (type === "income") {
         currentMonthData.incomes = [...(currentMonthData.incomes || []), newTransaction];
@@ -213,7 +182,7 @@ export function BudgetPlannerClient({ currentRoomId }: BudgetPlannerClientProps)
     id: string
   ) => {
     setBudgetData((prevData) => {
-      const currentMonthData = prevData[month] ? { ...prevData[month] } : { incomes: [], spendings: []};
+      const currentMonthData = prevData[month] ? { ...prevData[month] } : { incomes: [], spendings: [], financialGoal: "" };
       if (type === "income") {
         currentMonthData.incomes = (currentMonthData.incomes || []).filter((t) => t.id !== id);
       } else {
@@ -222,9 +191,17 @@ export function BudgetPlannerClient({ currentRoomId }: BudgetPlannerClientProps)
       return { ...prevData, [month]: currentMonthData };
     });
   };
+
+  const handleFinancialGoalChange = (month: MonthKey, goal: string) => {
+    setBudgetData((prevData) => {
+      const currentMonthData = prevData[month] ? { ...prevData[month] } : { incomes: [], spendings: [], financialGoal: "" };
+      currentMonthData.financialGoal = goal;
+      return { ...prevData, [month]: currentMonthData };
+    });
+  };
   
-  if (!isClient) {
-    return null; 
+  if (!user?.uid) { // Show loading or placeholder if user is not available yet
+    return <div className="text-center p-8"><Loader2 className="mx-auto h-12 w-12 animate-spin text-primary" /> <p className="mt-2">Loading budget data...</p></div>; 
   }
 
   return (
@@ -253,9 +230,10 @@ export function BudgetPlannerClient({ currentRoomId }: BudgetPlannerClientProps)
       <MonthView
         key={activeMonth} 
         monthKey={activeMonth}
-        data={budgetData[activeMonth] || { incomes: [], spendings: [] }} 
+        data={budgetData[activeMonth] || { incomes: [], spendings: [], financialGoal: "" }} 
         onAddTransaction={handleAddTransaction}
         onDeleteTransaction={handleDeleteTransaction}
+        onFinancialGoalChange={handleFinancialGoalChange}
         carryOverDetails={carryOverDetails}
       />
     </div>

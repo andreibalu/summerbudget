@@ -7,13 +7,15 @@ import { TransactionForm } from "./TransactionForm";
 import { TransactionList } from "./TransactionList";
 import { BalanceDisplay } from "./BalanceDisplay";
 import { Card, CardContent } from "@/components/ui/card";
-import type { CarryOverDetails } from "./BudgetPlannerClient"; // Import the interface
+import type { CarryOverDetails } from "./BudgetPlannerClient";
+import { AiSuggestions } from "./AiSuggestions"; // Import AiSuggestions
 
 interface MonthViewProps {
   monthKey: MonthKey;
   data: MonthData;
   onAddTransaction: (month: MonthKey, type: "income" | "spending", transaction: Omit<Transaction, "id">) => void;
   onDeleteTransaction: (month: MonthKey, type: "income" | "spending", id: string) => void;
+  onFinancialGoalChange: (month: MonthKey, goal: string) => void; // Add this prop
   carryOverDetails: CarryOverDetails;
 }
 
@@ -22,6 +24,7 @@ export function MonthView({
   data,
   onAddTransaction,
   onDeleteTransaction,
+  onFinancialGoalChange, // Destructure prop
   carryOverDetails,
 }: MonthViewProps) {
   
@@ -39,6 +42,10 @@ export function MonthView({
 
   const handleDeleteSpending = (id: string) => {
     onDeleteTransaction(monthKey, "spending", id);
+  };
+
+  const handleGoalChangeForMonth = (goal: string) => {
+    onFinancialGoalChange(monthKey, goal);
   };
 
   return (
@@ -73,6 +80,11 @@ export function MonthView({
           <TransactionList transactions={data.spendings || []} type="spending" onDelete={handleDeleteSpending} />
         </div>
       </div>
+      {/* AI Suggestions Component */}
+      <AiSuggestions 
+        monthData={data} 
+        onFinancialGoalChange={handleGoalChangeForMonth} 
+      />
     </div>
   );
 }

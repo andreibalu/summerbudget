@@ -8,6 +8,7 @@ export interface Transaction {
 export interface MonthData {
   incomes: Transaction[];
   spendings: Transaction[];
+  financialGoal: string; // Added for AI suggestions
 }
 
 export type MonthKey = 'June' | 'July' | 'August' | 'September';
@@ -18,22 +19,18 @@ export type BudgetData = {
   [key in MonthKey]: MonthData;
 };
 
-export const initialTransaction: Omit<Transaction, 'id'> = {
-  description: '',
-  amount: 0,
-};
-
-// Ensure initialBudgetData has empty arrays for incomes and spendings
+// Ensure initialBudgetData has empty arrays for incomes and spendings, and empty financialGoal
 export const initialBudgetData: BudgetData = MONTHS.reduce((acc, month) => {
   acc[month] = {
     incomes: [],
     spendings: [],
+    financialGoal: "",
   };
   return acc;
 }, {} as BudgetData);
 
 
 // Constants for localStorage keys
-export const USER_ID_STORAGE_KEY = "summerSproutUserId"; // For personal mode fallback
-export const BUDGET_DATA_STORAGE_KEY_PREFIX = "summerSproutBudgetData"; // For personal mode
-export const ACTIVE_ROOM_ID_STORAGE_KEY = "summerSproutActiveRoomId"; // To remember active room
+// USER_ID_STORAGE_KEY is no longer needed for budget data as it's tied to auth.uid
+// BUDGET_DATA_STORAGE_KEY_PREFIX is no longer needed for budget data
+export const ACTIVE_ROOM_ID_STORAGE_KEY = "summerSproutActiveRoomId"; // To remember active room UI state

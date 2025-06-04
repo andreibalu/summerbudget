@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Copy, AlertTriangle } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/context/AuthContext'; // Import useAuth
 
 interface RoomModalProps {
   isOpen: boolean;
@@ -29,16 +30,25 @@ interface RoomModalProps {
 export function RoomModal({ isOpen, currentRoomId, onClose, onCreateRoom, onJoinRoom, onLeaveRoom }: RoomModalProps) {
   const [joinRoomIdInput, setJoinRoomIdInput] = useState('');
   const { toast } = useToast();
+  const { user } = useAuth(); // Get user from AuthContext
 
   const handleCreateRoom = () => {
-    onCreateRoom(); // Page.tsx handles actual creation and gives feedback
+    if (!user) {
+      toast({ variant: "destructive", title: "Not Authenticated", description: "You must be logged in to create a room." });
+      return;
+    }
+    onCreateRoom(); 
   };
 
   const handleJoinRoom = () => {
+    if (!user) {
+      toast({ variant: "destructive", title: "Not Authenticated", description: "You must be logged in to join a room." });
+      return;
+    }
     const codeToJoin = joinRoomIdInput.trim().toUpperCase();
     if (codeToJoin) {
       if (!/^[A-Z0-9]{3}-[A-Z0-9]{3}$/.test(codeToJoin)) {
-        toast({ variant: "destructive", title: "Invalid Format", description: "Room code must be like XXX-XXX (letters/numbers)." });
+        toast({ variant: "destructive", title: "Invalid Format", description: "Room code must be like XXX-XXX." });
         return;
       }
       onJoinRoom(codeToJoin);
@@ -59,6 +69,10 @@ export function RoomModal({ isOpen, currentRoomId, onClose, onCreateRoom, onJoin
     }
   };
 
+  if (!user) { // Do not render modal if user is not authenticated (should be handled by page protection too)
+    return null;
+  }
+
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <DialogContent className="sm:max-w-md">
@@ -67,7 +81,7 @@ export function RoomModal({ isOpen, currentRoomId, onClose, onCreateRoom, onJoin
           <DialogDescription>
             {currentRoomId 
               ? `You are in room: ${currentRoomId}. Data is synced in real-time.`
-              : "Create a new room for real-time sharing or join one using a code."}
+              : "Create a new room for real-time sharing or join one using a code. Your personal budget is private to your account."}
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-6 py-4">
@@ -81,7 +95,7 @@ export function RoomModal({ isOpen, currentRoomId, onClose, onCreateRoom, onJoin
                   <span className="sr-only">Copy Room Code</span>
                 </Button>
               </div>
-              <Button onClick={onLeaveRoom} variant="destructive" className="w-full mt-4">Leave Current Room</Button>
+              <Button onClick={onLeaveRoom} variant="destructive" className="w-full mt-4">Switch to Personal Mode</Button>
             </div>
           ) : (
             <>
@@ -114,7 +128,7 @@ export function RoomModal({ isOpen, currentRoomId, onClose, onCreateRoom, onJoin
             <div className="flex items-start">
               <AlertTriangle className="h-5 w-5 text-accent mr-2 shrink-0" />
               <p className="text-xs text-accent-foreground">
-                <strong>Real-time Sync:</strong> When in a room, data is stored in Firebase Realtime Database and synced live. Ensure your Firebase setup is correct. Personal mode uses local browser storage.
+                <strong>Real-time Sync:</strong> When in a room, data is stored in Firebase Realtime Database and synced live. Personal mode saves your budget privately to your account in the cloud.
               </p>
             </div>
           </div>
