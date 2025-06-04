@@ -7,10 +7,10 @@ import { RoomModal } from '@/components/budget/RoomModal';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Leaf, Users, User, Loader2 } from 'lucide-react';
-import { ACTIVE_ROOM_ID_STORAGE_KEY } from '@/lib/types';
+// ACTIVE_ROOM_ID_STORAGE_KEY is no longer needed
 import { useToast } from '@/hooks/use-toast';
 import { db } from '@/lib/firebase'; 
-import { ref, set as firebaseSet, child, get } from "firebase/database";
+import { ref, set as firebaseSet, get } from "firebase/database";
 import { initialBudgetData } from '@/lib/types';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
@@ -30,7 +30,7 @@ function generateRoomCode(): string {
 export default function BudgetPlannerPage() {
   const [currentYear, setCurrentYear] = useState<number | null>(null);
   const [showRoomModal, setShowRoomModal] = useState(false);
-  const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
+  const [currentRoomId, setCurrentRoomId] = useState<string | null>(null); // Will always start as null
   const { toast } = useToast();
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
@@ -43,10 +43,7 @@ export default function BudgetPlannerPage() {
   
   useEffect(() => {
     setCurrentYear(new Date().getFullYear());
-    const persistedRoomId = localStorage.getItem(ACTIVE_ROOM_ID_STORAGE_KEY);
-    if (persistedRoomId) {
-      setCurrentRoomId(persistedRoomId);
-    }
+    // No longer persisting or retrieving room ID from localStorage
   }, []);
 
   const handleCreateRoom = (): string => {
@@ -59,23 +56,17 @@ export default function BudgetPlannerPage() {
       return "";
     }
     const newRoomId = generateRoomCode();
-    const roomMetaRef = ref(db, `rooms/${newRoomId}/meta`);
-    const roomDataRef = ref(db, `rooms/${newRoomId}/budgetData`);
-    const roomMembersRef = ref(db, `rooms/${newRoomId}/members/${user.uid}`);
-
+    
     const newRoomData = {
       budgetData: initialBudgetData,
       meta: { createdBy: user.uid, createdAt: new Date().toISOString() },
       members: { [user.uid]: true }
     };
     
-    // Set all room data at once for atomicity, though RTDB doesn't have true transactions like Firestore for multi-path writes.
-    // For simplicity, we set distinct paths.
-    Promise.all([
-      firebaseSet(ref(db, `rooms/${newRoomId}`), newRoomData)
-    ]).then(() => {
+    firebaseSet(ref(db, `rooms/${newRoomId}`), newRoomData)
+      .then(() => {
         setCurrentRoomId(newRoomId);
-        localStorage.setItem(ACTIVE_ROOM_ID_STORAGE_KEY, newRoomId);
+        // localStorage.setItem(ACTIVE_ROOM_ID_STORAGE_KEY, newRoomId); // Removed
         setShowRoomModal(false);
         toast({ title: "Room Created & Synced", description: `You are now in room: ${newRoomId}. Share this code.` });
       })
@@ -104,11 +95,10 @@ export default function BudgetPlannerPage() {
     const roomRef = ref(db, `rooms/${upperRoomId}`);
     get(roomRef).then((snapshot) => {
       if (snapshot.exists()) {
-        // Room exists, add user as member if not already one
         const membersRef = ref(db, `rooms/${upperRoomId}/members/${user.uid}`);
         firebaseSet(membersRef, true).then(() => {
           setCurrentRoomId(upperRoomId);
-          localStorage.setItem(ACTIVE_ROOM_ID_STORAGE_KEY, upperRoomId);
+          // localStorage.setItem(ACTIVE_ROOM_ID_STORAGE_KEY, upperRoomId); // Removed
           setShowRoomModal(false);
           toast({ title: "Joined Room", description: `Switched to room: ${upperRoomId}.` });
         }).catch(error => {
@@ -126,8 +116,8 @@ export default function BudgetPlannerPage() {
 
   const handleLeaveRoom = () => {
     setCurrentRoomId(null);
-    localStorage.removeItem(ACTIVE_ROOM_ID_STORAGE_KEY);
-    setShowRoomModal(false); // Close modal after leaving
+    // localStorage.removeItem(ACTIVE_ROOM_ID_STORAGE_KEY); // Removed
+    setShowRoomModal(false); 
     toast({ title: "Personal Mode Activated", description: "Your budget is now private to your account." });
   };
   
@@ -179,7 +169,7 @@ export default function BudgetPlannerPage() {
           <p>Loading copyright year...</p> 
         )}
       </footer>
-      {user && ( // Only render modal if user is authenticated
+      {user && ( 
         <RoomModal
           isOpen={showRoomModal}
           currentRoomId={currentRoomId}

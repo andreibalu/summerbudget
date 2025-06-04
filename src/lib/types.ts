@@ -33,4 +33,4 @@ export const initialBudgetData: BudgetData = MONTHS.reduce((acc, month) => {
 // Constants for localStorage keys
 // USER_ID_STORAGE_KEY is no longer needed for budget data as it's tied to auth.uid
 // BUDGET_DATA_STORAGE_KEY_PREFIX is no longer needed for budget data
-export const ACTIVE_ROOM_ID_STORAGE_KEY = "summerSproutActiveRoomId"; // To remember active room UI state
+// ACTIVE_ROOM_ID_STORAGE_KEY is no longer used.
