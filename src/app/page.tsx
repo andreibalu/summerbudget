@@ -46,7 +46,6 @@ export default function BudgetPlannerPage() {
     setCurrentYear(new Date().getFullYear());
   }, []);
 
-  // Fetch user's created room ID on load if user is authenticated
   useEffect(() => {
     if (user && db) {
       const userCreatedRoomRef = ref(db, `users/${user.uid}/createdRoomId`);
@@ -61,38 +60,46 @@ export default function BudgetPlannerPage() {
         toast({ variant: "destructive", title: "Error", description: "Could not fetch your room data." });
       });
     } else {
-      setUserOwnedRoomId(null); // Reset if user logs out
+      setUserOwnedRoomId(null); 
     }
   }, [user, toast]);
 
   const handleRoomModeButtonClick = async () => {
     if (!user || !db) {
-      setShowRoomModal(true); // Fallback or if user somehow not set
+      toast({ variant: "destructive", title: "Error", description: "Authentication or database not available." });
       return;
     }
     setIsLoadingRoomAction(true);
-    if (userOwnedRoomId) {
-      const roomRef = ref(db, `rooms/${userOwnedRoomId}`);
-      try {
-        const snapshot = await get(roomRef);
-        if (snapshot.exists()) {
-          setCurrentRoomId(userOwnedRoomId);
-          toast({ title: "Switched to Your Room", description: `You are now in room: ${userOwnedRoomId}.` });
-          setShowRoomModal(false);
-        } else {
-          // Stale createdRoomId, clear it and show modal
-          await firebaseRemove(ref(db, `users/${user.uid}/createdRoomId`));
-          setUserOwnedRoomId(null);
-          toast({ variant: "destructive", title: "Your Room Not Found", description: "Your previously created room no longer exists. Clearing reference." });
+
+    if (currentRoomId) {
+      // User is currently in a room. Action is to leave and go to personal mode.
+      await handleLeaveRoom(); 
+    } else {
+      // User is currently in personal mode.
+      if (userOwnedRoomId) {
+        // User has an owned room, try to switch to it.
+        const roomRef = ref(db, `rooms/${userOwnedRoomId}`);
+        try {
+          const snapshot = await get(roomRef);
+          if (snapshot.exists()) {
+            setCurrentRoomId(userOwnedRoomId);
+            toast({ title: "Switched to Your Room", description: `You are now in room: ${userOwnedRoomId}.` });
+          } else {
+            // Owned room doesn't exist anymore (stale reference)
+            await firebaseRemove(ref(db, `users/${user.uid}/createdRoomId`));
+            setUserOwnedRoomId(null);
+            toast({ variant: "destructive", title: "Your Room Not Found", description: "Your previously created room no longer exists. Opening room options." });
+            setShowRoomModal(true); 
+          }
+        } catch (error) {
+          console.error("Error checking user's owned room:", error);
+          toast({ variant: "destructive", title: "Error", description: "Could not verify your room." });
           setShowRoomModal(true);
         }
-      } catch (error) {
-        console.error("Error checking user's owned room:", error);
-        toast({ variant: "destructive", title: "Error", description: "Could not verify your room." });
+      } else {
+        // User is in personal mode and has no owned room. Open modal to create/join.
         setShowRoomModal(true);
       }
-    } else {
-      setShowRoomModal(true);
     }
     setIsLoadingRoomAction(false);
   };
@@ -117,7 +124,7 @@ export default function BudgetPlannerPage() {
       await firebaseSet(ref(db, `users/${user.uid}/createdRoomId`), newRoomId);
       
       setCurrentRoomId(newRoomId);
-      setUserOwnedRoomId(newRoomId); // Update local state for owned room
+      setUserOwnedRoomId(newRoomId); 
       setShowRoomModal(false);
       toast({ title: "Room Created & Synced", description: `You are now in room: ${newRoomId}. This is now your primary room.` });
     } catch (error) {
@@ -162,17 +169,21 @@ export default function BudgetPlannerPage() {
 
   const handleLeaveRoom = async () => {
     if (!db || !user || !currentRoomId) {
-      toast({ variant: "destructive", title: "Error", description: "Cannot leave room. Missing required info." });
+      // No current room to leave, or user/db not available. This might be called when already in personal mode.
+      if(currentRoomId) { // Only toast if there was a room to leave
+         toast({ variant: "destructive", title: "Error", description: "Cannot leave room. Missing required info." });
+      }
+      setCurrentRoomId(null); // Ensure user is in personal mode
+      setShowRoomModal(false); // Close modal if open
+      setIsLoadingRoomAction(false);
       return;
     }
     setIsLoadingRoomAction(true);
     const roomToLeaveId = currentRoomId;
     
     try {
-      // Remove user from members list
       await firebaseRemove(ref(db, `rooms/${roomToLeaveId}/members/${user.uid}`));
       
-      // Check if room should be deleted
       const membersRef = ref(db, `rooms/${roomToLeaveId}/members`);
       const membersSnapshot = await get(membersRef);
       
@@ -186,16 +197,15 @@ export default function BudgetPlannerPage() {
       if (isRoomEmpty) {
         await firebaseRemove(ref(db, `rooms/${roomToLeaveId}`));
         toast({ title: "Room Left & Deleted", description: `Room ${roomToLeaveId} was empty and has been deleted.` });
-        // If this was the user's owned room, clear their createdRoomId
         if (userOwnedRoomId === roomToLeaveId) {
           await firebaseRemove(ref(db, `users/${user.uid}/createdRoomId`));
           setUserOwnedRoomId(null);
         }
       } else {
-        toast({ title: "Room Left", description: `You have left room ${roomToLeaveId}.` });
+        toast({ title: "Room Left", description: `You have left room ${roomToLeaveId}. Switched to Personal Mode.` });
       }
 
-      setCurrentRoomId(null); // Switch to personal mode locally
+      setCurrentRoomId(null); 
       setShowRoomModal(false); 
 
     } catch (error) {
@@ -215,6 +225,18 @@ export default function BudgetPlannerPage() {
     );
   }
 
+  const getButtonTextAndIcon = () => {
+    if (currentRoomId) {
+      return { text: 'To Personal Mode', icon: <User className="mr-2 h-4 w-4" /> };
+    }
+    if (userOwnedRoomId) {
+      return { text: 'My Room', icon: <Users className="mr-2 h-4 w-4" /> };
+    }
+    return { text: 'Room Options', icon: <Users className="mr-2 h-4 w-4" /> };
+  };
+
+  const { text: buttonText, icon: buttonIcon } = getButtonTextAndIcon();
+
   return (
     <main className="min-h-screen bg-background text-foreground p-4 md:p-8 flex flex-col items-center font-body">
       <Card className="w-full max-w-5xl shadow-xl rounded-lg">
@@ -230,8 +252,8 @@ export default function BudgetPlannerPage() {
             <div className="flex flex-col items-center sm:flex-row sm:items-center gap-2 sm:gap-4">
               {user.email && <span className="text-xs text-muted-foreground hidden sm:block">{user.email}</span>}
                <Button variant="outline" onClick={handleRoomModeButtonClick} size="sm" className="w-auto sm:w-auto" disabled={isLoadingRoomAction}>
-                {isLoadingRoomAction ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : (currentRoomId ? <Users className="mr-2 h-4 w-4" /> : <User className="mr-2 h-4 w-4" />)}
-                {currentRoomId ? 'Room Mode' : (userOwnedRoomId ? 'My Room' : 'Personal Mode')}
+                {isLoadingRoomAction ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : buttonIcon}
+                {buttonText}
               </Button>
               <LogoutButton />
             </div>
@@ -258,7 +280,7 @@ export default function BudgetPlannerPage() {
         <RoomModal
           isOpen={showRoomModal}
           currentRoomId={currentRoomId}
-          userHasActiveOwnedRoom={!!userOwnedRoomId} // Pass this new prop
+          userHasActiveOwnedRoom={!!userOwnedRoomId} 
           onClose={() => setShowRoomModal(false)}
           onCreateRoom={handleCreateRoom}
           onJoinRoom={handleJoinRoom}
@@ -269,3 +291,4 @@ export default function BudgetPlannerPage() {
     </main>
   );
 }
+
