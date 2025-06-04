@@ -177,14 +177,6 @@ export function RoomModal({
               </div>
             </>
           )}
-           <div className="mt-4 p-3 bg-accent/10 rounded-md border border-accent/50">
-            <div className="flex items-start">
-              <AlertTriangle className="h-5 w-5 text-accent mr-2 shrink-0" />
-              <p className="text-xs text-accent-foreground">
-                <strong>Real-time Sync:</strong> When in a room, data is stored in Firebase Realtime Database and synced live. Personal mode saves your budget privately to your account in the cloud. Your 'My Room' is your primary created room.
-              </p>
-            </div>
-          </div>
         </div>
         <DialogFooter className="sm:justify-start">
           <DialogClose asChild>
