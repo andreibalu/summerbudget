@@ -14,33 +14,48 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Copy, AlertTriangle } from 'lucide-react';
+import { Copy, AlertTriangle, Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { useAuth } from '@/context/AuthContext'; // Import useAuth
+import { useAuth } from '@/context/AuthContext';
 
 interface RoomModalProps {
   isOpen: boolean;
   currentRoomId: string | null;
+  userHasActiveOwnedRoom: boolean; 
   onClose: () => void;
-  onCreateRoom: () => string; 
-  onJoinRoom: (roomId: string) => void;
-  onLeaveRoom: () => void;
+  onCreateRoom: () => Promise<string>; 
+  onJoinRoom: (roomId: string) => Promise<void>;
+  onLeaveRoom: () => Promise<void>;
+  isLoading: boolean;
 }
 
-export function RoomModal({ isOpen, currentRoomId, onClose, onCreateRoom, onJoinRoom, onLeaveRoom }: RoomModalProps) {
+export function RoomModal({ 
+  isOpen, 
+  currentRoomId, 
+  userHasActiveOwnedRoom,
+  onClose, 
+  onCreateRoom, 
+  onJoinRoom, 
+  onLeaveRoom,
+  isLoading 
+}: RoomModalProps) {
   const [joinRoomIdInput, setJoinRoomIdInput] = useState('');
   const { toast } = useToast();
-  const { user } = useAuth(); // Get user from AuthContext
+  const { user } = useAuth();
 
-  const handleCreateRoom = () => {
+  const handleCreateRoomClick = async () => {
     if (!user) {
       toast({ variant: "destructive", title: "Not Authenticated", description: "You must be logged in to create a room." });
       return;
     }
-    onCreateRoom(); 
+    // If user has an active owned room and is currently in personal mode,
+    // this button press (via page.tsx) might directly take them to their room
+    // or if they are in another room, it creates a new primary room.
+    // The RoomModal's 'Create New Room' should always attempt to create a new one.
+    await onCreateRoom(); 
   };
 
-  const handleJoinRoom = () => {
+  const handleJoinRoomClick = async () => {
     if (!user) {
       toast({ variant: "destructive", title: "Not Authenticated", description: "You must be logged in to join a room." });
       return;
@@ -51,7 +66,7 @@ export function RoomModal({ isOpen, currentRoomId, onClose, onCreateRoom, onJoin
         toast({ variant: "destructive", title: "Invalid Format", description: "Room code must be like XXX-XXX." });
         return;
       }
-      onJoinRoom(codeToJoin);
+      await onJoinRoom(codeToJoin);
       setJoinRoomIdInput(''); 
     } else {
        toast({ variant: "destructive", title: "Input Required", description: "Please enter a room code to join." });
@@ -69,7 +84,7 @@ export function RoomModal({ isOpen, currentRoomId, onClose, onCreateRoom, onJoin
     }
   };
 
-  if (!user) { // Do not render modal if user is not authenticated (should be handled by page protection too)
+  if (!user) { 
     return null;
   }
 
@@ -81,7 +96,10 @@ export function RoomModal({ isOpen, currentRoomId, onClose, onCreateRoom, onJoin
           <DialogDescription>
             {currentRoomId 
               ? `You are in room: ${currentRoomId}. Data is synced in real-time.`
-              : "Create a new room for real-time sharing or join one using a code. Your personal budget is private to your account."}
+              : (userHasActiveOwnedRoom 
+                  ? "You have an existing room. Click 'My Room' on the main page to access it, or create a new one below (this will become your new primary room)."
+                  : "Create a new room for real-time sharing or join one using a code. Your personal budget is private to your account."
+                )}
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-6 py-4">
@@ -90,18 +108,24 @@ export function RoomModal({ isOpen, currentRoomId, onClose, onCreateRoom, onJoin
               <Label>Current Room Code</Label>
               <div className="flex items-center space-x-2">
                 <Input value={currentRoomId} readOnly className="font-mono"/>
-                <Button variant="outline" size="icon" onClick={handleCopyToClipboard}>
+                <Button variant="outline" size="icon" onClick={handleCopyToClipboard} disabled={isLoading}>
                   <Copy className="h-4 w-4" />
                   <span className="sr-only">Copy Room Code</span>
                 </Button>
               </div>
-              <Button onClick={onLeaveRoom} variant="destructive" className="w-full mt-4">Switch to Personal Mode</Button>
+              <Button onClick={onLeaveRoom} variant="destructive" className="w-full mt-4" disabled={isLoading}>
+                {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Switch to Personal Mode & Leave Room
+              </Button>
             </div>
           ) : (
             <>
               <div className="flex flex-col items-center">
-                <Button onClick={handleCreateRoom} className="w-full">Create New Shared Room</Button>
-                <p className="text-xs text-muted-foreground mt-1">Generates a unique code (e.g., ABC-123) for real-time sync.</p>
+                <Button onClick={handleCreateRoomClick} className="w-full" disabled={isLoading}>
+                  {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Create New Shared Room
+                </Button>
+                <p className="text-xs text-muted-foreground mt-1">Generates a unique code (e.g., ABC-123) for real-time sync. This will become your primary room.</p>
               </div>
               
               <div className="space-y-2">
@@ -115,8 +139,10 @@ export function RoomModal({ isOpen, currentRoomId, onClose, onCreateRoom, onJoin
                     onChange={(e) => setJoinRoomIdInput(e.target.value.toUpperCase())}
                     placeholder="e.g., XYZ-789"
                     maxLength={7} 
+                    disabled={isLoading}
                   />
-                  <Button onClick={handleJoinRoom} disabled={!joinRoomIdInput.trim() || joinRoomIdInput.trim().length !== 7}>
+                  <Button onClick={handleJoinRoomClick} disabled={isLoading || !joinRoomIdInput.trim() || joinRoomIdInput.trim().length !== 7}>
+                    {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                     Join
                   </Button>
                 </div>
@@ -128,14 +154,14 @@ export function RoomModal({ isOpen, currentRoomId, onClose, onCreateRoom, onJoin
             <div className="flex items-start">
               <AlertTriangle className="h-5 w-5 text-accent mr-2 shrink-0" />
               <p className="text-xs text-accent-foreground">
-                <strong>Real-time Sync:</strong> When in a room, data is stored in Firebase Realtime Database and synced live. Personal mode saves your budget privately to your account in the cloud.
+                <strong>Real-time Sync:</strong> When in a room, data is stored in Firebase Realtime Database and synced live. Personal mode saves your budget privately to your account in the cloud. Your 'My Room' is your primary created room.
               </p>
             </div>
           </div>
         </div>
         <DialogFooter className="sm:justify-start">
           <DialogClose asChild>
-            <Button type="button" variant="ghost">
+            <Button type="button" variant="ghost" disabled={isLoading}>
               Close
             </Button>
           </DialogClose>

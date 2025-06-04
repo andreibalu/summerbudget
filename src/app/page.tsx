@@ -1,16 +1,15 @@
 
 "use client";
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { BudgetPlannerClient } from '@/components/budget/BudgetPlannerClient';
 import { RoomModal } from '@/components/budget/RoomModal';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Leaf, Users, User, Loader2 } from 'lucide-react';
-// ACTIVE_ROOM_ID_STORAGE_KEY is no longer needed
 import { useToast } from '@/hooks/use-toast';
 import { db } from '@/lib/firebase'; 
-import { ref, set as firebaseSet, get } from "firebase/database";
+import { ref, set as firebaseSet, get, remove as firebaseRemove, serverTimestamp } from "firebase/database";
 import { initialBudgetData } from '@/lib/types';
 import { useAuth } from '@/context/AuthContext';
 import { useRouter } from 'next/navigation';
@@ -30,7 +29,9 @@ function generateRoomCode(): string {
 export default function BudgetPlannerPage() {
   const [currentYear, setCurrentYear] = useState<number | null>(null);
   const [showRoomModal, setShowRoomModal] = useState(false);
-  const [currentRoomId, setCurrentRoomId] = useState<string | null>(null); // Will always start as null
+  const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
+  const [userOwnedRoomId, setUserOwnedRoomId] = useState<string | null>(null);
+  const [isLoadingRoomAction, setIsLoadingRoomAction] = useState(false);
   const { toast } = useToast();
   const { user, loading: authLoading } = useAuth();
   const router = useRouter();
@@ -43,82 +44,166 @@ export default function BudgetPlannerPage() {
   
   useEffect(() => {
     setCurrentYear(new Date().getFullYear());
-    // No longer persisting or retrieving room ID from localStorage
   }, []);
 
-  const handleCreateRoom = (): string => {
-    if (!db) {
-      toast({ variant: "destructive", title: "Database Error", description: "Firebase Realtime Database is not connected. Cannot create room." });
+  // Fetch user's created room ID on load if user is authenticated
+  useEffect(() => {
+    if (user && db) {
+      const userCreatedRoomRef = ref(db, `users/${user.uid}/createdRoomId`);
+      get(userCreatedRoomRef).then((snapshot) => {
+        if (snapshot.exists()) {
+          setUserOwnedRoomId(snapshot.val());
+        } else {
+          setUserOwnedRoomId(null);
+        }
+      }).catch(error => {
+        console.error("Error fetching user's created room ID:", error);
+        toast({ variant: "destructive", title: "Error", description: "Could not fetch your room data." });
+      });
+    } else {
+      setUserOwnedRoomId(null); // Reset if user logs out
+    }
+  }, [user, toast]);
+
+  const handleRoomModeButtonClick = async () => {
+    if (!user || !db) {
+      setShowRoomModal(true); // Fallback or if user somehow not set
+      return;
+    }
+    setIsLoadingRoomAction(true);
+    if (userOwnedRoomId) {
+      const roomRef = ref(db, `rooms/${userOwnedRoomId}`);
+      try {
+        const snapshot = await get(roomRef);
+        if (snapshot.exists()) {
+          setCurrentRoomId(userOwnedRoomId);
+          toast({ title: "Switched to Your Room", description: `You are now in room: ${userOwnedRoomId}.` });
+          setShowRoomModal(false);
+        } else {
+          // Stale createdRoomId, clear it and show modal
+          await firebaseRemove(ref(db, `users/${user.uid}/createdRoomId`));
+          setUserOwnedRoomId(null);
+          toast({ variant: "destructive", title: "Your Room Not Found", description: "Your previously created room no longer exists. Clearing reference." });
+          setShowRoomModal(true);
+        }
+      } catch (error) {
+        console.error("Error checking user's owned room:", error);
+        toast({ variant: "destructive", title: "Error", description: "Could not verify your room." });
+        setShowRoomModal(true);
+      }
+    } else {
+      setShowRoomModal(true);
+    }
+    setIsLoadingRoomAction(false);
+  };
+
+
+  const handleCreateRoom = async () => {
+    if (!db || !user) {
+      toast({ variant: "destructive", title: "Error", description: "Cannot create room. Database or user not available." });
       return "";
     }
-    if (!user) {
-      toast({ variant: "destructive", title: "Authentication Error", description: "You must be logged in to create a room." });
-      return "";
-    }
+    setIsLoadingRoomAction(true);
     const newRoomId = generateRoomCode();
     
     const newRoomData = {
       budgetData: initialBudgetData,
-      meta: { createdBy: user.uid, createdAt: new Date().toISOString() },
+      meta: { createdBy: user.uid, createdAt: serverTimestamp() },
       members: { [user.uid]: true }
     };
     
-    firebaseSet(ref(db, `rooms/${newRoomId}`), newRoomData)
-      .then(() => {
-        setCurrentRoomId(newRoomId);
-        // localStorage.setItem(ACTIVE_ROOM_ID_STORAGE_KEY, newRoomId); // Removed
-        setShowRoomModal(false);
-        toast({ title: "Room Created & Synced", description: `You are now in room: ${newRoomId}. Share this code.` });
-      })
-      .catch(error => {
-        console.error("Failed to create room in Firebase:", error);
-        toast({ variant: "destructive", title: "Room Creation Failed", description: "Could not create the room. Check console." });
-      });
+    try {
+      await firebaseSet(ref(db, `rooms/${newRoomId}`), newRoomData);
+      await firebaseSet(ref(db, `users/${user.uid}/createdRoomId`), newRoomId);
+      
+      setCurrentRoomId(newRoomId);
+      setUserOwnedRoomId(newRoomId); // Update local state for owned room
+      setShowRoomModal(false);
+      toast({ title: "Room Created & Synced", description: `You are now in room: ${newRoomId}. This is now your primary room.` });
+    } catch (error) {
+      console.error("Failed to create room in Firebase:", error);
+      toast({ variant: "destructive", title: "Room Creation Failed", description: "Could not create the room. Check console." });
+    } finally {
+      setIsLoadingRoomAction(false);
+    }
     return newRoomId; 
   };
 
-  const handleJoinRoom = (roomIdToJoin: string) => {
+  const handleJoinRoom = async (roomIdToJoin: string) => {
     const upperRoomId = roomIdToJoin.toUpperCase();
     if (!/^[A-Z0-9]{3}-[A-Z0-9]{3}$/.test(upperRoomId)) {
         toast({ variant: "destructive", title: "Invalid Code", description: "Room code must be in XXX-XXX format." });
         return;
     }
-    if (!db) {
-      toast({ variant: "destructive", title: "Database Error", description: "Firebase Realtime Database is not connected." });
+    if (!db || !user) {
+      toast({ variant: "destructive", title: "Error", description: "Cannot join room. Database or user not available." });
       return;
     }
-    if (!user) {
-      toast({ variant: "destructive", title: "Authentication Error", description: "You must be logged in to join a room." });
-      return;
-    }
-
+    setIsLoadingRoomAction(true);
     const roomRef = ref(db, `rooms/${upperRoomId}`);
-    get(roomRef).then((snapshot) => {
+    try {
+      const snapshot = await get(roomRef);
       if (snapshot.exists()) {
         const membersRef = ref(db, `rooms/${upperRoomId}/members/${user.uid}`);
-        firebaseSet(membersRef, true).then(() => {
-          setCurrentRoomId(upperRoomId);
-          // localStorage.setItem(ACTIVE_ROOM_ID_STORAGE_KEY, upperRoomId); // Removed
-          setShowRoomModal(false);
-          toast({ title: "Joined Room", description: `Switched to room: ${upperRoomId}.` });
-        }).catch(error => {
-          console.error("Failed to add user to room members:", error);
-          toast({ variant: "destructive", title: "Join Failed", description: "Could not update room membership." });
-        });
+        await firebaseSet(membersRef, true);
+        setCurrentRoomId(upperRoomId);
+        setShowRoomModal(false);
+        toast({ title: "Joined Room", description: `Switched to room: ${upperRoomId}.` });
       } else {
         toast({ variant: "destructive", title: "Room Not Found", description: `Room ${upperRoomId} does not exist.` });
       }
-    }).catch(error => {
-      console.error("Error checking room existence:", error);
-      toast({ variant: "destructive", title: "Error Joining Room", description: "Could not verify room." });
-    });
+    } catch (error) {
+      console.error("Error joining room:", error);
+      toast({ variant: "destructive", title: "Error Joining Room", description: "Could not verify or join room." });
+    } finally {
+      setIsLoadingRoomAction(false);
+    }
   };
 
-  const handleLeaveRoom = () => {
-    setCurrentRoomId(null);
-    // localStorage.removeItem(ACTIVE_ROOM_ID_STORAGE_KEY); // Removed
-    setShowRoomModal(false); 
-    toast({ title: "Personal Mode Activated", description: "Your budget is now private to your account." });
+  const handleLeaveRoom = async () => {
+    if (!db || !user || !currentRoomId) {
+      toast({ variant: "destructive", title: "Error", description: "Cannot leave room. Missing required info." });
+      return;
+    }
+    setIsLoadingRoomAction(true);
+    const roomToLeaveId = currentRoomId;
+    
+    try {
+      // Remove user from members list
+      await firebaseRemove(ref(db, `rooms/${roomToLeaveId}/members/${user.uid}`));
+      
+      // Check if room should be deleted
+      const membersRef = ref(db, `rooms/${roomToLeaveId}/members`);
+      const membersSnapshot = await get(membersRef);
+      
+      let isRoomEmpty = true;
+      if (membersSnapshot.exists() && membersSnapshot.val() !== null) {
+        if (Object.keys(membersSnapshot.val()).length > 0) {
+          isRoomEmpty = false;
+        }
+      }
+
+      if (isRoomEmpty) {
+        await firebaseRemove(ref(db, `rooms/${roomToLeaveId}`));
+        toast({ title: "Room Left & Deleted", description: `Room ${roomToLeaveId} was empty and has been deleted.` });
+        // If this was the user's owned room, clear their createdRoomId
+        if (userOwnedRoomId === roomToLeaveId) {
+          await firebaseRemove(ref(db, `users/${user.uid}/createdRoomId`));
+          setUserOwnedRoomId(null);
+        }
+      } else {
+        toast({ title: "Room Left", description: `You have left room ${roomToLeaveId}.` });
+      }
+
+      setCurrentRoomId(null); // Switch to personal mode locally
+      setShowRoomModal(false); 
+
+    } catch (error) {
+      console.error("Error leaving room:", error);
+      toast({ variant: "destructive", title: "Error Leaving Room", description: "An error occurred. See console." });
+    } finally {
+      setIsLoadingRoomAction(false);
+    }
   };
   
   if (authLoading || !user) {
@@ -142,11 +227,11 @@ export default function BudgetPlannerPage() {
               </CardTitle>
               <Leaf className="h-5 w-5 sm:h-6 md:h-8 text-primary transform scale-x-[-1]" />
             </div>
-            <div className="flex flex-col sm:flex-row items-center gap-2 sm:gap-4">
+            <div className="flex flex-col items-center sm:flex-row sm:items-center gap-2 sm:gap-4">
               {user.email && <span className="text-xs text-muted-foreground hidden sm:block">{user.email}</span>}
-               <Button variant="outline" onClick={() => setShowRoomModal(true)} size="sm" className="w-auto">
-                {currentRoomId ? <Users className="mr-2 h-4 w-4" /> : <User className="mr-2 h-4 w-4" />}
-                {currentRoomId ? 'Room Mode' : 'Personal Mode'}
+               <Button variant="outline" onClick={handleRoomModeButtonClick} size="sm" className="w-auto sm:w-auto" disabled={isLoadingRoomAction}>
+                {isLoadingRoomAction ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : (currentRoomId ? <Users className="mr-2 h-4 w-4" /> : <User className="mr-2 h-4 w-4" />)}
+                {currentRoomId ? 'Room Mode' : (userOwnedRoomId ? 'My Room' : 'Personal Mode')}
               </Button>
               <LogoutButton />
             </div>
@@ -173,10 +258,12 @@ export default function BudgetPlannerPage() {
         <RoomModal
           isOpen={showRoomModal}
           currentRoomId={currentRoomId}
+          userHasActiveOwnedRoom={!!userOwnedRoomId} // Pass this new prop
           onClose={() => setShowRoomModal(false)}
           onCreateRoom={handleCreateRoom}
           onJoinRoom={handleJoinRoom}
           onLeaveRoom={handleLeaveRoom}
+          isLoading={isLoadingRoomAction}
         />
       )}
     </main>
