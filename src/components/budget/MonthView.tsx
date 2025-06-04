@@ -40,7 +40,7 @@ export function MonthView({
 
   return (
     <div className="space-y-6">
-      <BalanceDisplay incomes={data.incomes} spendings={data.spendings} />
+      <BalanceDisplay incomes={data.incomes} spendings={data.spendings} monthName={monthKey} />
 
       <div className="grid md:grid-cols-2 gap-6">
         <Card className="shadow-sm">

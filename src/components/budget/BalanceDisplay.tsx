@@ -9,9 +9,10 @@ import { DollarSign, TrendingDown, TrendingUp, Wallet } from "lucide-react";
 interface BalanceDisplayProps {
   incomes: Transaction[];
   spendings: Transaction[];
+  monthName: string;
 }
 
-export function BalanceDisplay({ incomes, spendings }: BalanceDisplayProps) {
+export function BalanceDisplay({ incomes, spendings, monthName }: BalanceDisplayProps) {
   const totalIncome = incomes.reduce((sum, item) => sum + item.amount, 0);
   const totalSpendings = spendings.reduce((sum, item) => sum + item.amount, 0);
   const balance = totalIncome - totalSpendings;
@@ -19,7 +20,9 @@ export function BalanceDisplay({ incomes, spendings }: BalanceDisplayProps) {
   return (
     <Card className="my-6 shadow-md">
       <CardHeader>
-        <CardTitle className="text-2xl font-headline text-center text-primary">Account Balance</CardTitle>
+        <CardTitle className="text-2xl font-headline text-center text-primary">
+          Account Balance - {monthName}
+        </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
         <div className="flex justify-between items-center p-3 bg-green-500/10 rounded-lg">
