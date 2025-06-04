@@ -191,7 +191,7 @@ export function BudgetPlannerClient({ currentRoomId }: BudgetPlannerClientProps)
     <Tabs defaultValue={MONTHS[0]} className="w-full">
       <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 mb-6">
         {MONTHS.map((month) => (
-          <TabsTrigger key={month} value={month} className="text-sm md:text-base">
+          <TabsTrigger key={month} value={month} className="px-2 py-1.5 text-xs sm:px-3 sm:text-sm md:text-base">
             {month}
           </TabsTrigger>
         ))}
