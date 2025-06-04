@@ -75,28 +75,30 @@ export default function BudgetPlannerPage() {
 
     setIsLoadingRoomAction(true);
     try {
-      if (currentRoomId) { 
-        await handleLeaveRoom(); 
-      } else if (userOwnedRoomId) { 
+      if (currentRoomId) { // If in a room, switch to personal mode (this button's primary action when in a room)
+        setCurrentRoomId(null);
+        setCurrentRoomName(null);
+      } else if (userOwnedRoomId) { // If in personal, and has an owned room, try to enter it
           const roomRef = ref(db, `rooms/${userOwnedRoomId}`);
           const snapshot = await get(roomRef);
           if (snapshot.exists()) {
               const roomData = snapshot.val();
               const membersRef = ref(db, `rooms/${userOwnedRoomId}/members/${user.uid}`);
               const memberSnapshot = await get(membersRef);
+              // Ensure the user is still a member (or re-add them if they own it)
               if (!memberSnapshot.exists() || memberSnapshot.val() !== true) {
                   await firebaseSet(membersRef, true); 
               }
               setCurrentRoomId(userOwnedRoomId);
               setCurrentRoomName(roomData.meta?.roomName || null);
-          } else {
+          } else { // Owned room doesn't exist anymore
               await firebaseRemove(ref(db, `users/${user.uid}/createdRoomId`));
               setUserOwnedRoomId(null);
               setCurrentRoomName(null);
               toast({ variant: "destructive", title: "Your Room Not Found", description: "Your previously created room no longer exists. Opening room options." });
-              setShowRoomModal(true);
+              setShowRoomModal(true); // Open modal as fallback
           }
-      } else { 
+      } else { // In personal, no owned room, so open modal
           setShowRoomModal(true);
       }
     } catch (error) {
@@ -124,11 +126,17 @@ export default function BudgetPlannerPage() {
 
     try {
       await firebaseSet(ref(db, `rooms/${newRoomId}`), newRoomData);
+      // Remove old owned room if it exists, then set new one
+      if(userOwnedRoomId) {
+          // Optionally: Add logic here if you want to delete the old room from `rooms` if this user was the only member.
+          // For now, we just clear their ownership reference.
+          await firebaseRemove(ref(db, `users/${user.uid}/createdRoomId`));
+      }
       await firebaseSet(ref(db, `users/${user.uid}/createdRoomId`), newRoomId);
 
       setCurrentRoomId(newRoomId);
       setCurrentRoomName(roomName);
-      setUserOwnedRoomId(newRoomId);
+      setUserOwnedRoomId(newRoomId); // Update local state for owned room
       setShowRoomModal(false);
     } catch (error) {
       console.error("Failed to create room in Firebase:", error);
@@ -181,9 +189,9 @@ export default function BudgetPlannerPage() {
     }
   };
 
-  const handleLeaveRoom = async () => {
+ const handleLeaveRoomOperations = async () => {
     if (!db || !user || !currentRoomId) {
-      setCurrentRoomId(null);
+      setCurrentRoomId(null); // UI switch
       setCurrentRoomName(null);
       setShowRoomModal(false);
       return;
@@ -193,49 +201,54 @@ export default function BudgetPlannerPage() {
     setIsLoadingRoomAction(true);
 
     try {
+      // Attempt to read members first
       const membersRef = ref(db, `rooms/${roomToLeaveId}/members`);
       const membersSnapshot = await get(membersRef);
       const currentMembers = membersSnapshot.exists() ? membersSnapshot.val() : {};
       const numberOfMembers = Object.keys(currentMembers).length;
       const userWasMember = currentMembers.hasOwnProperty(user.uid);
 
+      // Logic for removing member or deleting room
       if (userWasMember && numberOfMembers === 1 && currentMembers[user.uid]) {
+        // User is the last member, delete the room
         await firebaseRemove(ref(db, `rooms/${roomToLeaveId}`));
-        if (userOwnedRoomId === roomToLeaveId) {
+        if (userOwnedRoomId === roomToLeaveId) { // If it was their owned room
           await firebaseRemove(ref(db, `users/${user.uid}/createdRoomId`));
-          setUserOwnedRoomId(null);
+          setUserOwnedRoomId(null); // Clear local state
         }
       } else if (userWasMember) {
+        // User is a member but not the last one, remove them
         await firebaseRemove(ref(db, `rooms/${roomToLeaveId}/members/${user.uid}`));
-      } else if (!userWasMember && numberOfMembers > 0) {
-         if (userOwnedRoomId === roomToLeaveId) {
-            await firebaseRemove(ref(db, `users/${user.uid}/createdRoomId`));
-            setUserOwnedRoomId(null);
-        }
       }
-      setCurrentRoomId(null); // Switch to personal mode regardless of Firebase success here for UI responsiveness
+      // If user was not a member (edge case, e.g., rules changed), or if operations above completed:
+      // Fallthrough: if room was deleted and it was userOwnedRoomId, this has been handled
+
+      setCurrentRoomId(null);
       setCurrentRoomName(null);
-      setShowRoomModal(false);
+
     } catch (error) {
-      console.error("Error leaving room:", error);
+      console.error("Error leaving/deleting room:", error);
+      // Even on error, try to switch UI to personal mode
       setCurrentRoomId(null); 
       setCurrentRoomName(null);
-      setShowRoomModal(false);
       const e = error as Error & { code?: string };
       if (e.code === 'PERMISSION_DENIED') {
           toast({ variant: "destructive", title: "Permission Denied", description: "Could not update room status. Check Firebase rules."});
       } else {
-          toast({ variant: "destructive", title: "Error Leaving Room", description: "An error occurred. See console." });
+          toast({ variant: "destructive", title: "Error Leaving Room", description: "An error occurred while trying to leave. See console." });
       }
     } finally {
       setIsLoadingRoomAction(false);
+      setShowRoomModal(false); // Ensure modal closes
     }
   };
 
+
   const handleSwitchToPersonalModeVisualOnly = () => {
-    if (!currentRoomId) return;
+    if (!currentRoomId) return; // Already in personal or no room context
     setCurrentRoomId(null);
     setCurrentRoomName(null);
+    // No Firebase operations here, just visual switch
   };
 
   if (authLoading || !user) {
@@ -248,13 +261,12 @@ export default function BudgetPlannerPage() {
   }
 
   const getPersonalModeButtonDetails = () => {
-    if (currentRoomId) {
-        return { text: 'To Personal Mode', icon: <User className="mr-2 h-4 w-4" /> };
-    }
+    // This function is only called when currentRoomId is null (i.e., in personal mode)
+    // The "Menu" dropdown handles the in-room state.
     if (userOwnedRoomId) {
       return { text: 'My Room', icon: <Users className="mr-2 h-4 w-4" /> };
     }
-    return { text: 'Create Room', icon: <Users className="mr-2 h-4 w-4" /> };
+    return { text: 'Rooms', icon: <Users className="mr-2 h-4 w-4" /> };
   };
 
 
@@ -286,7 +298,7 @@ export default function BudgetPlannerPage() {
                       <UserSquare className="mr-2 h-4 w-4" />
                       Switch to Personal Mode
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={handleLeaveRoom} disabled={isLoadingRoomAction}>
+                    <DropdownMenuItem onClick={handleLeaveRoomOperations} disabled={isLoadingRoomAction}>
                       <DoorOpen className="mr-2 h-4 w-4" />
                       Leave Current Room
                     </DropdownMenuItem>
@@ -335,10 +347,11 @@ export default function BudgetPlannerPage() {
           onClose={() => setShowRoomModal(false)}
           onCreateRoom={handleCreateRoom}
           onJoinRoom={handleJoinRoom}
-          onLeaveRoom={handleLeaveRoom}
+          onLeaveRoom={handleLeaveRoomOperations} // Pass the correct leave function
           isLoading={isLoadingRoomAction}
         />
       )}
     </main>
   );
 }
+
