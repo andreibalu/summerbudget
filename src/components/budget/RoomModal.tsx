@@ -31,13 +31,20 @@ export function RoomModal({ isOpen, currentRoomId, onClose, onCreateRoom, onJoin
   const { toast } = useToast();
 
   const handleCreateRoom = () => {
-    onCreateRoom();
+    onCreateRoom(); // Page.tsx handles actual creation and gives feedback
   };
 
   const handleJoinRoom = () => {
-    if (joinRoomIdInput.trim()) {
-      onJoinRoom(joinRoomIdInput.trim());
+    const codeToJoin = joinRoomIdInput.trim().toUpperCase();
+    if (codeToJoin) {
+      if (!/^[A-Z0-9]{3}-[A-Z0-9]{3}$/.test(codeToJoin)) {
+        toast({ variant: "destructive", title: "Invalid Format", description: "Room code must be like XXX-XXX (letters/numbers)." });
+        return;
+      }
+      onJoinRoom(codeToJoin);
       setJoinRoomIdInput(''); 
+    } else {
+       toast({ variant: "destructive", title: "Input Required", description: "Please enter a room code to join." });
     }
   };
 
@@ -59,8 +66,8 @@ export function RoomModal({ isOpen, currentRoomId, onClose, onCreateRoom, onJoin
           <DialogTitle>Share & Join Budget Room</DialogTitle>
           <DialogDescription>
             {currentRoomId 
-              ? `You are in room: ${currentRoomId}. Share this code or leave the room.`
-              : "Create a new room or join one using a code."}
+              ? `You are in room: ${currentRoomId}. Data is synced in real-time.`
+              : "Create a new room for real-time sharing or join one using a code."}
           </DialogDescription>
         </DialogHeader>
         <div className="grid gap-6 py-4">
@@ -79,8 +86,8 @@ export function RoomModal({ isOpen, currentRoomId, onClose, onCreateRoom, onJoin
           ) : (
             <>
               <div className="flex flex-col items-center">
-                <Button onClick={handleCreateRoom} className="w-full">Create New Room</Button>
-                <p className="text-xs text-muted-foreground mt-1">Generates a unique code for a new budget sheet.</p>
+                <Button onClick={handleCreateRoom} className="w-full">Create New Shared Room</Button>
+                <p className="text-xs text-muted-foreground mt-1">Generates a unique code (e.g., ABC-123) for real-time sync.</p>
               </div>
               
               <div className="space-y-2">
@@ -91,10 +98,11 @@ export function RoomModal({ isOpen, currentRoomId, onClose, onCreateRoom, onJoin
                   <Input
                     id="room-code"
                     value={joinRoomIdInput}
-                    onChange={(e) => setJoinRoomIdInput(e.target.value)}
-                    placeholder="Enter room code"
+                    onChange={(e) => setJoinRoomIdInput(e.target.value.toUpperCase())}
+                    placeholder="e.g., XYZ-789"
+                    maxLength={7} 
                   />
-                  <Button onClick={handleJoinRoom} disabled={!joinRoomIdInput.trim()}>
+                  <Button onClick={handleJoinRoom} disabled={!joinRoomIdInput.trim() || joinRoomIdInput.trim().length !== 7}>
                     Join
                   </Button>
                 </div>
@@ -106,7 +114,7 @@ export function RoomModal({ isOpen, currentRoomId, onClose, onCreateRoom, onJoin
             <div className="flex items-start">
               <AlertTriangle className="h-5 w-5 text-accent mr-2 shrink-0" />
               <p className="text-xs text-accent-foreground">
-                <strong>Note:</strong> Room data is saved locally in your browser. Changes are <strong>not</strong> automatically synced across different devices or browsers in real-time.
+                <strong>Real-time Sync:</strong> When in a room, data is stored in Firebase Realtime Database and synced live. Ensure your Firebase setup is correct. Personal mode uses local browser storage.
               </p>
             </div>
           </div>

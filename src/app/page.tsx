@@ -8,12 +8,29 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button';
 import { Leaf, Users, User } from 'lucide-react';
 import { ACTIVE_ROOM_ID_STORAGE_KEY } from '@/lib/types';
+import { useToast } from '@/hooks/use-toast';
+import { db } from '@/lib/firebase'; // Firebase RTDB
+import { ref, set as firebaseSet } from "firebase/database";
+import { initialBudgetData } from '@/lib/types';
+
+
+function generateRoomCode(): string {
+  const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let part1 = '';
+  let part2 = '';
+  for (let i = 0; i < 3; i++) {
+    part1 += chars.charAt(Math.floor(Math.random() * chars.length));
+    part2 += chars.charAt(Math.floor(Math.random() * chars.length));
+  }
+  return `${part1}-${part2}`;
+}
 
 export default function BudgetPlannerPage() {
   const [currentYear, setCurrentYear] = useState<number | null>(null);
   const [showRoomModal, setShowRoomModal] = useState(false);
   const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
   const [isClient, setIsClient] = useState(false);
+  const { toast } = useToast();
 
   useEffect(() => {
     setIsClient(true);
@@ -25,23 +42,50 @@ export default function BudgetPlannerPage() {
   }, []);
 
   const handleCreateRoom = (): string => {
-    const newRoomId = crypto.randomUUID();
-    setCurrentRoomId(newRoomId);
-    localStorage.setItem(ACTIVE_ROOM_ID_STORAGE_KEY, newRoomId);
-    setShowRoomModal(false);
-    return newRoomId;
+    if (!db) {
+      toast({ variant: "destructive", title: "Database Error", description: "Firebase Realtime Database is not connected. Cannot create room." });
+      return "";
+    }
+    const newRoomId = generateRoomCode();
+    // Initialize room data in Firebase RTDB
+    const roomDataRef = ref(db, `rooms/${newRoomId}/budgetData`);
+    firebaseSet(roomDataRef, initialBudgetData)
+      .then(() => {
+        setCurrentRoomId(newRoomId);
+        localStorage.setItem(ACTIVE_ROOM_ID_STORAGE_KEY, newRoomId);
+        setShowRoomModal(false);
+        toast({ title: "Room Created & Synced", description: `You are now in room: ${newRoomId}. Share this code.` });
+      })
+      .catch(error => {
+        console.error("Failed to create room in Firebase:", error);
+        toast({ variant: "destructive", title: "Room Creation Failed", description: "Could not create the room in the cloud. Check console." });
+      });
+    return newRoomId; // Return optimistic, actual set happens async
   };
 
-  const handleJoinRoom = (roomId: string) => {
-    setCurrentRoomId(roomId);
-    localStorage.setItem(ACTIVE_ROOM_ID_STORAGE_KEY, roomId);
+  const handleJoinRoom = (roomIdToJoin: string) => {
+    // Basic validation for room code format (optional but good)
+    if (!/^[A-Z0-9]{3}-[A-Z0-9]{3}$/.test(roomIdToJoin.toUpperCase())) {
+        toast({ variant: "destructive", title: "Invalid Code", description: "Room code must be in XXX-XXX format (letters/numbers)." });
+        return;
+    }
+    if (!db) {
+      toast({ variant: "destructive", title: "Database Error", description: "Firebase Realtime Database is not connected. Cannot join room." });
+      return;
+    }
+    // Note: Checking if room exists in DB before joining is complex with RTDB rules for "existence check only"
+    // For now, we'll just set it. BudgetPlannerClient will handle loading or initializing if empty.
+    setCurrentRoomId(roomIdToJoin.toUpperCase());
+    localStorage.setItem(ACTIVE_ROOM_ID_STORAGE_KEY, roomIdToJoin.toUpperCase());
     setShowRoomModal(false);
+    toast({ title: "Joined Room", description: `Switched to room: ${roomIdToJoin.toUpperCase()}. Data will sync if room exists.` });
   };
 
   const handleLeaveRoom = () => {
     setCurrentRoomId(null);
     localStorage.removeItem(ACTIVE_ROOM_ID_STORAGE_KEY);
-    setShowRoomModal(false); // Optionally close modal, or let user close manually
+    setShowRoomModal(false);
+    toast({ title: "Left Room", description: "You are now in Personal Mode." });
   };
   
   if (!isClient) {
@@ -72,7 +116,7 @@ export default function BudgetPlannerPage() {
           </div>
           {currentRoomId && (
             <CardDescription className="text-center mt-2 text-sm text-muted-foreground">
-              Active Room Code: <span className="font-semibold text-accent select-all">{currentRoomId}</span>
+              Active Room Code: <span className="font-semibold text-accent select-all">{currentRoomId}</span> (Real-time Sync Active)
             </CardDescription>
           )}
         </CardHeader>

@@ -1,14 +1,14 @@
 
 "use client";
 
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useRef } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { initialBudgetData, MONTHS } from "@/lib/types";
+import { initialBudgetData, MONTHS, USER_ID_STORAGE_KEY, BUDGET_DATA_STORAGE_KEY_PREFIX } from "@/lib/types";
 import type { BudgetData, MonthKey, Transaction } from "@/lib/types";
 import { MonthView } from "./MonthView";
-
-const USER_ID_STORAGE_KEY = "summerSproutUserId"; // For personal mode fallback
-const BUDGET_DATA_STORAGE_KEY_PREFIX = "summerSproutBudgetData";
+import { db } from "@/lib/firebase"; // Firebase RTDB
+import { ref as dbRef, onValue, set as firebaseSet, off } from "firebase/database";
+import { useToast } from "@/hooks/use-toast";
 
 interface BudgetPlannerClientProps {
   currentRoomId: string | null;
@@ -17,9 +17,15 @@ interface BudgetPlannerClientProps {
 export function BudgetPlannerClient({ currentRoomId }: BudgetPlannerClientProps) {
   const [budgetData, setBudgetData] = useState<BudgetData>(initialBudgetData);
   const [isClient, setIsClient] = useState(false);
-  const [userId, setUserId] = useState<string | null>(null); // For personal mode
+  const [userId, setUserId] = useState<string | null>(null);
+  const { toast } = useToast();
+  const [isDataLoadedFromDB, setIsDataLoadedFromDB] = useState(false);
+  const budgetDataRef = useRef(budgetData); // Ref to hold the latest budgetData for comparison
 
-  // Effect to set client status and load user ID for personal mode
+  useEffect(() => {
+    budgetDataRef.current = budgetData;
+  }, [budgetData]);
+
   useEffect(() => {
     setIsClient(true);
     let id = localStorage.getItem(USER_ID_STORAGE_KEY);
@@ -30,60 +36,115 @@ export function BudgetPlannerClient({ currentRoomId }: BudgetPlannerClientProps)
     setUserId(id);
   }, []);
 
-  const getStorageKey = useCallback(() => {
-    if (currentRoomId) {
-      return `${BUDGET_DATA_STORAGE_KEY_PREFIX}_room_${currentRoomId}`;
-    }
-    if (userId) { // Fallback to personal user-specific key if no room and userId is available
+  const getPersonalStorageKey = useCallback(() => {
+    if (userId) {
       return `${BUDGET_DATA_STORAGE_KEY_PREFIX}_user_${userId}`;
     }
-    return null; // Should not happen if userId is set correctly
-  }, [currentRoomId, userId]);
+    return null;
+  }, [userId]);
 
-  // Effect to load budget data when component mounts or room/user ID changes
+  // Effect for Firebase RTDB connection and data loading/syncing
   useEffect(() => {
-    if (!isClient || !userId) return; // Ensure userId is loaded for personal mode key generation
-
-    const storageKey = getStorageKey();
-    if (!storageKey) {
-      // This case might happen if userId isn't set yet, or if we decide to not have a personal fallback
-      // For now, if no room and no userId, it defaults to initialBudgetData
-      setBudgetData(initialBudgetData);
+    if (!isClient || !db) {
+      if (isClient && currentRoomId && !db) {
+         toast({ variant: "destructive", title: "Database Error", description: "Realtime Database not connected. Sync disabled." });
+      }
       return;
     }
-    
-    const savedData = localStorage.getItem(storageKey);
-    if (savedData) {
-      try {
-        const parsedData = JSON.parse(savedData);
-        const completeData = MONTHS.reduce((acc, month) => {
-          acc[month] = parsedData[month] || initialBudgetData[month];
-          acc[month].incomes = acc[month].incomes || [];
-          acc[month].spendings = acc[month].spendings || [];
-          return acc;
-        }, {} as BudgetData);
-        setBudgetData(completeData);
-      } catch (error) {
-        console.error(`Failed to parse budget data from localStorage (key: ${storageKey})`, error);
-        localStorage.removeItem(storageKey);
+
+    if (currentRoomId) {
+      setIsDataLoadedFromDB(false); // Reset for new room
+      const roomBudgetDataRef = dbRef(db, `rooms/${currentRoomId}/budgetData`);
+      const unsubscribe = onValue(roomBudgetDataRef, (snapshot) => {
+        if (snapshot.exists()) {
+          const dataFromDB = snapshot.val();
+          const completeData = MONTHS.reduce((acc, month) => {
+            acc[month] = dataFromDB[month] || initialBudgetData[month];
+            acc[month].incomes = acc[month].incomes || [];
+            acc[month].spendings = acc[month].spendings || [];
+            return acc;
+          }, {} as BudgetData);
+          setBudgetData(completeData);
+          if (!isDataLoadedFromDB) { // Avoid toast on every sync, only on initial load of existing data
+             toast({ title: "Data Synced", description: `Budget data loaded from room ${currentRoomId}.` });
+          }
+        } else {
+          // Room doesn't exist in DB, or is empty. Initialize it.
+          // This might have been done at room creation, but this is a fallback.
+          setBudgetData(initialBudgetData); // Set local state
+          firebaseSet(roomBudgetDataRef, initialBudgetData)
+            .then(() => {
+               toast({ title: "Room Initialized", description: `New room ${currentRoomId} created in the cloud.` });
+            })
+            .catch(error => {
+              console.error("Failed to initialize room in Firebase:", error);
+              toast({ variant: "destructive", title: "Initialization Error", description: "Could not create room in cloud." });
+            });
+        }
+        setIsDataLoadedFromDB(true);
+      }, (error) => {
+        console.error("Firebase onValue error:", error);
+        toast({ variant: "destructive", title: "Sync Error", description: "Could not fetch data from cloud." });
+        setIsDataLoadedFromDB(true); // Allow local changes even if initial load fails
+      });
+
+      return () => {
+        off(roomBudgetDataRef, "value", unsubscribe);
+        setIsDataLoadedFromDB(false);
+      };
+    } else {
+      // Personal mode: Load from localStorage
+      setIsDataLoadedFromDB(false); // Not using DB for personal mode
+      const personalKey = getPersonalStorageKey();
+      if (personalKey) {
+        const savedData = localStorage.getItem(personalKey);
+        if (savedData) {
+          try {
+            const parsedData = JSON.parse(savedData);
+            const completeData = MONTHS.reduce((acc, month) => {
+              acc[month] = parsedData[month] || initialBudgetData[month];
+              acc[month].incomes = acc[month].incomes || [];
+              acc[month].spendings = acc[month].spendings || [];
+              return acc;
+            }, {} as BudgetData);
+            setBudgetData(completeData);
+          } catch (error) {
+            console.error("Failed to parse personal budget data:", error);
+            localStorage.removeItem(personalKey);
+            setBudgetData(initialBudgetData);
+          }
+        } else {
+          setBudgetData(initialBudgetData);
+        }
+      } else {
         setBudgetData(initialBudgetData);
       }
-    } else {
-      // If no data for this key (new room or new user), initialize with default
-      setBudgetData(initialBudgetData);
     }
-  }, [isClient, userId, currentRoomId, getStorageKey]);
+  }, [isClient, currentRoomId, userId, toast, getPersonalStorageKey]);
 
 
-  // Effect to save budget data whenever it changes or room/user ID changes
+  // Effect to save budget data (to RTDB for rooms, to localStorage for personal)
   useEffect(() => {
-    if (!isClient || !userId) return;
+    if (!isClient) return;
 
-    const storageKey = getStorageKey();
-    if (storageKey) {
-      localStorage.setItem(storageKey, JSON.stringify(budgetData));
+    if (currentRoomId && db && isDataLoadedFromDB) {
+      // Only write if data has actually changed from what was last known to be in DB or set locally
+      // This simple check might not be perfect for deep object changes if onValue fires for local sets.
+      // However, RTDB client SDK is usually smart about not re-triggering for identical local data.
+      // A more robust check would involve deep comparison or versioning if needed.
+      const roomBudgetDataRef = dbRef(db, `rooms/${currentRoomId}/budgetData`);
+      firebaseSet(roomBudgetDataRef, budgetData).catch(error => {
+        console.error("Failed to sync data to Firebase:", error);
+        toast({ variant: "destructive", title: "Sync Error", description: "Could not save changes to the cloud." });
+      });
+    } else if (!currentRoomId && userId) {
+      // Personal mode: save to localStorage
+      const personalKey = getPersonalStorageKey();
+      if (personalKey) {
+        localStorage.setItem(personalKey, JSON.stringify(budgetData));
+      }
     }
-  }, [budgetData, isClient, userId, getStorageKey]);
+  }, [budgetData, isClient, currentRoomId, userId, db, toast, isDataLoadedFromDB, getPersonalStorageKey]);
 
 
   const handleAddTransaction = (
@@ -93,7 +154,7 @@ export function BudgetPlannerClient({ currentRoomId }: BudgetPlannerClientProps)
   ) => {
     setBudgetData((prevData) => {
       const newTransaction: Transaction = { ...transaction, id: crypto.randomUUID() };
-      const currentMonthData = prevData[month] || { incomes: [], spendings: [] }; // Ensure month data exists
+      const currentMonthData = prevData[month] || { incomes: [], spendings: [] };
       const updatedMonthData = { ...currentMonthData }; 
       
       if (type === "income") {
@@ -123,11 +184,8 @@ export function BudgetPlannerClient({ currentRoomId }: BudgetPlannerClientProps)
   };
   
   if (!isClient) {
-    // Render nothing or a loading indicator until client-side checks are complete
-    // This matches the behavior in page.tsx
     return null; 
   }
-
 
   return (
     <Tabs defaultValue={MONTHS[0]} className="w-full">
