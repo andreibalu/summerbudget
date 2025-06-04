@@ -7,12 +7,14 @@ import { TransactionForm } from "./TransactionForm";
 import { TransactionList } from "./TransactionList";
 import { BalanceDisplay } from "./BalanceDisplay";
 import { Card, CardContent } from "@/components/ui/card";
+import type { CarryOverDetails } from "./BudgetPlannerClient"; // Import the interface
 
 interface MonthViewProps {
   monthKey: MonthKey;
   data: MonthData;
   onAddTransaction: (month: MonthKey, type: "income" | "spending", transaction: Omit<Transaction, "id">) => void;
   onDeleteTransaction: (month: MonthKey, type: "income" | "spending", id: string) => void;
+  carryOverDetails: CarryOverDetails;
 }
 
 export function MonthView({
@@ -20,6 +22,7 @@ export function MonthView({
   data,
   onAddTransaction,
   onDeleteTransaction,
+  carryOverDetails,
 }: MonthViewProps) {
   
   const handleAddIncome = (income: Omit<Transaction, "id">) => {
@@ -40,7 +43,12 @@ export function MonthView({
 
   return (
     <div className="space-y-6">
-      <BalanceDisplay incomes={data.incomes} spendings={data.spendings} monthName={monthKey} />
+      <BalanceDisplay 
+        incomes={data.incomes || []} 
+        spendings={data.spendings || []} 
+        monthName={monthKey}
+        carryOverDetails={carryOverDetails}
+      />
 
       <div className="grid md:grid-cols-2 gap-6">
         {/* Left Column: Income */}
@@ -51,7 +59,7 @@ export function MonthView({
               <TransactionForm type="income" onSubmit={handleAddIncome} />
             </CardContent>
           </Card>
-          <TransactionList transactions={data.incomes} type="income" onDelete={handleDeleteIncome} />
+          <TransactionList transactions={data.incomes || []} type="income" onDelete={handleDeleteIncome} />
         </div>
 
         {/* Right Column: Spending */}
@@ -62,7 +70,7 @@ export function MonthView({
               <TransactionForm type="spending" onSubmit={handleAddSpending} />
             </CardContent>
           </Card>
-          <TransactionList transactions={data.spendings} type="spending" onDelete={handleDeleteSpending} />
+          <TransactionList transactions={data.spendings || []} type="spending" onDelete={handleDeleteSpending} />
         </div>
       </div>
     </div>

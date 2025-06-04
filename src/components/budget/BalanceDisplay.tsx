@@ -2,20 +2,24 @@
 "use client";
 
 import React from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import type { Transaction } from "@/lib/types";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import type { Transaction, MonthKey } from "@/lib/types";
 import { DollarSign, TrendingDown, TrendingUp, Wallet } from "lucide-react";
+import type { CarryOverDetails } from "./BudgetPlannerClient";
 
 interface BalanceDisplayProps {
   incomes: Transaction[];
   spendings: Transaction[];
   monthName: string;
+  carryOverDetails: CarryOverDetails;
 }
 
-export function BalanceDisplay({ incomes, spendings, monthName }: BalanceDisplayProps) {
-  const totalIncome = incomes.reduce((sum, item) => sum + item.amount, 0);
-  const totalSpendings = spendings.reduce((sum, item) => sum + item.amount, 0);
-  const balance = totalIncome - totalSpendings;
+export function BalanceDisplay({ incomes, spendings, monthName, carryOverDetails }: BalanceDisplayProps) {
+  const userTotalIncome = (incomes || []).reduce((sum, item) => sum + item.amount, 0);
+  const totalSpendings = (spendings || []).reduce((sum, item) => sum + item.amount, 0);
+  
+  const effectiveTotalIncome = userTotalIncome + (carryOverDetails.amount > 0 ? carryOverDetails.amount : 0);
+  const balance = effectiveTotalIncome - totalSpendings;
 
   return (
     <Card className="my-6 shadow-md">
@@ -30,8 +34,13 @@ export function BalanceDisplay({ incomes, spendings, monthName }: BalanceDisplay
             <TrendingUp className="h-5 w-5 mr-2 text-green-600" />
             <span className="font-medium">Total Income</span>
           </div>
-          <span className="font-semibold text-green-600">{totalIncome.toFixed(2)} RON</span>
+          <span className="font-semibold text-green-600">{effectiveTotalIncome.toFixed(2)} RON</span>
         </div>
+        {carryOverDetails.amount > 0 && carryOverDetails.previousMonthName && (
+          <p className="text-xs text-center text-muted-foreground -mt-2">
+            (Includes {carryOverDetails.amount.toFixed(2)} RON carried over from {carryOverDetails.previousMonthName})
+          </p>
+        )}
         <div className="flex justify-between items-center p-3 bg-red-500/10 rounded-lg">
           <div className="flex items-center">
             <TrendingDown className="h-5 w-5 mr-2 text-red-600" />
