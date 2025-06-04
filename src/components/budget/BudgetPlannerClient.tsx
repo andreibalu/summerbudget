@@ -44,10 +44,11 @@ export function BudgetPlannerClient({ currentRoomId, user }: BudgetPlannerClient
   useEffect(() => {
     if (!db || !user?.uid) {
       if (user?.uid && !db) {
-        toast({ variant: "destructive", title: "Database Error", description: "Realtime Database not connected. Sync disabled." });
+        // Toast for critical db error can remain if desired, or removed
+        // toast({ variant: "destructive", title: "Database Error", description: "Realtime Database not connected. Sync disabled." });
       }
-      setIsDataLoaded(true); // Allow UI to render with initial (empty) data
-      setBudgetData(initialBudgetData); // Reset to initial state if no path/db
+      setIsDataLoaded(true); 
+      setBudgetData(initialBudgetData); 
       return;
     }
 
@@ -73,13 +74,9 @@ export function BudgetPlannerClient({ currentRoomId, user }: BudgetPlannerClient
           return acc;
         }, {} as BudgetData);
 
-        // Success toast removed: if (!isDataLoaded) { toast({ title: "Data Synced", ...}) }
       } else {
         dataToSet = JSON.parse(JSON.stringify(initialBudgetData));
         firebaseSet(dataRef, dataToSet)
-          .then(() => {
-            // Success toast removed: toast({ title: currentRoomId ? "Room Initialized" : "Personal Budget Initialized", ... });
-          })
           .catch(error => {
             console.error("Failed to initialize data in Firebase:", error);
             toast({ variant: "destructive", title: "Initialization Error", description: "Could not create budget in cloud." });
@@ -90,12 +87,16 @@ export function BudgetPlannerClient({ currentRoomId, user }: BudgetPlannerClient
     }, (error) => {
       console.error(`Firebase onValue error for path: ${dataPath}`, error);
       const contextDescription = currentRoomId ? `room '${currentRoomId}'` : "personal budget";
+      let errorDescription = `Could not load data for ${contextDescription}.`;
+      if ((error as Error & { code: string }).code === 'PERMISSION_DENIED') {
+          errorDescription = `Permission denied for ${contextDescription}. Ensure you are a member or have access.`;
+      }
       toast({ 
         variant: "destructive", 
         title: "Sync Error", 
-        description: `Could not load data for ${contextDescription}. Details: ${error.message}` 
+        description: errorDescription
       });
-      setBudgetData(initialBudgetData);
+      setBudgetData(initialBudgetData); // Reset to empty to avoid showing stale data
       setIsDataLoaded(true); 
     });
 
@@ -195,6 +196,11 @@ export function BudgetPlannerClient({ currentRoomId, user }: BudgetPlannerClient
         currentMonthData.spendings = [...(currentMonthData.spendings || []), newTransaction];
       }
       return { ...safePrevData, [month]: currentMonthData };
+    });
+    toast({
+        title: type === "income" ? "Income Added" : "Spending Added",
+        description: `${transaction.description}: ${transaction.amount.toFixed(2)} RON`,
+        duration: 2000,
     });
   };
 
