@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Leaf, Users, User, Loader2, MenuIcon, UserSquare, DoorOpen, Power } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { db } from '@/lib/firebase'; 
+import { db } from '@/lib/firebase';
 import { ref, set as firebaseSet, get, remove as firebaseRemove, serverTimestamp } from "firebase/database";
 import { initialBudgetData } from '@/lib/types';
 import { useAuth } from '@/context/AuthContext';
@@ -31,6 +31,7 @@ export default function BudgetPlannerPage() {
   const [currentYear, setCurrentYear] = useState<number | null>(null);
   const [showRoomModal, setShowRoomModal] = useState(false);
   const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
+  const [currentRoomName, setCurrentRoomName] = useState<string | null>(null); // Added for room name
   const [userOwnedRoomId, setUserOwnedRoomId] = useState<string | null>(null);
   const [isLoadingRoomAction, setIsLoadingRoomAction] = useState(false);
   const { toast } = useToast();
@@ -42,7 +43,7 @@ export default function BudgetPlannerPage() {
       router.replace('/login');
     }
   }, [user, authLoading, router]);
-  
+
   useEffect(() => {
     setCurrentYear(new Date().getFullYear());
   }, []);
@@ -61,39 +62,40 @@ export default function BudgetPlannerPage() {
         toast({ variant: "destructive", title: "Error", description: "Could not fetch your room data." });
       });
     } else {
-      setUserOwnedRoomId(null); 
+      setUserOwnedRoomId(null);
     }
   }, [user, toast]);
+
 
   const handleRoomModeButtonClick = async () => {
     if (!user || !db) {
       toast({ variant: "destructive", title: "Error", description: "Authentication or database not available." });
       return;
     }
-    // This button is only shown when not in a room. If in a room, the DropdownMenu is shown.
-    // So, if this function is called, currentRoomId is null.
+
     setIsLoadingRoomAction(true);
     try {
         if (userOwnedRoomId) {
-            // User has an owned room, try to switch to it.
             const roomRef = ref(db, `rooms/${userOwnedRoomId}`);
             const snapshot = await get(roomRef);
             if (snapshot.exists()) {
+                const roomData = snapshot.val();
                 const membersRef = ref(db, `rooms/${userOwnedRoomId}/members/${user.uid}`);
                 const memberSnapshot = await get(membersRef);
                 if (!memberSnapshot.exists() || memberSnapshot.val() !== true) {
-                    await firebaseSet(membersRef, true); 
+                    await firebaseSet(membersRef, true);
                 }
                 setCurrentRoomId(userOwnedRoomId);
-                toast({ title: "Switched to Your Room", description: `You are now in room: ${userOwnedRoomId}.` });
+                setCurrentRoomName(roomData.meta?.roomName || null); // Set room name
+                toast({ title: "Switched to Your Room", description: `You are now in room: ${roomData.meta?.roomName || userOwnedRoomId}.` });
             } else {
                 await firebaseRemove(ref(db, `users/${user.uid}/createdRoomId`));
                 setUserOwnedRoomId(null);
+                setCurrentRoomName(null); // Clear room name
                 toast({ variant: "destructive", title: "Your Room Not Found", description: "Your previously created room no longer exists. Opening room options." });
                 setShowRoomModal(true);
             }
         } else {
-            // User is in personal mode and has no owned room. Open modal to create/join.
             setShowRoomModal(true);
         }
     } catch (error) {
@@ -105,28 +107,29 @@ export default function BudgetPlannerPage() {
   };
 
 
-  const handleCreateRoom = async () => {
+  const handleCreateRoom = async (roomName: string) => { // Accept roomName
     if (!db || !user) {
       toast({ variant: "destructive", title: "Error", description: "Cannot create room. Database or user not available." });
       return "";
     }
     setIsLoadingRoomAction(true);
     const newRoomId = generateRoomCode();
-    
+
     const newRoomData = {
       budgetData: initialBudgetData,
-      meta: { createdBy: user.uid, createdAt: serverTimestamp() },
-      members: { [user.uid]: true } 
+      meta: { createdBy: user.uid, createdAt: serverTimestamp(), roomName: roomName }, // Save roomName
+      members: { [user.uid]: true }
     };
-    
+
     try {
       await firebaseSet(ref(db, `rooms/${newRoomId}`), newRoomData);
       await firebaseSet(ref(db, `users/${user.uid}/createdRoomId`), newRoomId);
-      
+
       setCurrentRoomId(newRoomId);
-      setUserOwnedRoomId(newRoomId); 
+      setCurrentRoomName(roomName); // Set current room name
+      setUserOwnedRoomId(newRoomId);
       setShowRoomModal(false);
-      toast({ title: "Room Created & Synced", description: `You are now in room: ${newRoomId}. This is now your primary room.` });
+      toast({ title: "Room Created & Synced", description: `You are now in room '${roomName}' (${newRoomId}). This is now your primary room.` });
     } catch (error) {
       console.error("Failed to create room in Firebase:", error);
       const e = error as Error & { code?: string };
@@ -138,7 +141,7 @@ export default function BudgetPlannerPage() {
     } finally {
       setIsLoadingRoomAction(false);
     }
-    return newRoomId; 
+    return newRoomId;
   };
 
   const handleJoinRoom = async (roomIdToJoin: string) => {
@@ -156,11 +159,13 @@ export default function BudgetPlannerPage() {
     try {
       const snapshot = await get(roomRef);
       if (snapshot.exists()) {
+        const roomData = snapshot.val();
         const membersRef = ref(db, `rooms/${upperRoomId}/members/${user.uid}`);
-        await firebaseSet(membersRef, true); 
+        await firebaseSet(membersRef, true);
         setCurrentRoomId(upperRoomId);
+        setCurrentRoomName(roomData.meta?.roomName || null); // Set room name on join
         setShowRoomModal(false);
-        toast({ title: "Joined Room", description: `Switched to room: ${upperRoomId}.` });
+        toast({ title: "Joined Room", description: `Switched to room '${roomData.meta?.roomName || upperRoomId}'.` });
       } else {
         toast({ variant: "destructive", title: "Room Not Found", description: `Room ${upperRoomId} does not exist.` });
       }
@@ -179,45 +184,43 @@ export default function BudgetPlannerPage() {
 
   const handleLeaveRoom = async () => {
     if (!db || !user || !currentRoomId) {
-      setCurrentRoomId(null); 
+      setCurrentRoomId(null);
+      setCurrentRoomName(null); // Clear room name
       setShowRoomModal(false);
-      // Only show error if there was a room to leave, otherwise it's a no-op or visual switch.
-      if (currentRoomId) { 
+      if (currentRoomId) {
          toast({ variant: "destructive", title: "Error Leaving Room", description: "Cannot leave room. Missing required info." });
       }
-      return; 
+      return;
     }
-  
+
     const roomToLeaveId = currentRoomId;
+    const roomToLeaveName = currentRoomName; // Capture name before clearing
     setIsLoadingRoomAction(true);
-  
+
     try {
       const membersRef = ref(db, `rooms/${roomToLeaveId}/members`);
       const membersSnapshot = await get(membersRef);
       const currentMembers = membersSnapshot.exists() ? membersSnapshot.val() : {};
       const numberOfMembers = Object.keys(currentMembers).length;
       const userWasMember = currentMembers.hasOwnProperty(user.uid);
-  
+
       if (userWasMember && numberOfMembers === 1 && currentMembers[user.uid]) {
         await firebaseRemove(ref(db, `rooms/${roomToLeaveId}`));
-        toast({ title: "Room Left & Deleted", description: `Room ${roomToLeaveId} was empty and has been deleted.` });
+        toast({ title: "Room Left & Deleted", description: `Room '${roomToLeaveName || roomToLeaveId}' was empty and has been deleted.` });
         if (userOwnedRoomId === roomToLeaveId) {
           await firebaseRemove(ref(db, `users/${user.uid}/createdRoomId`));
           setUserOwnedRoomId(null);
         }
       } else if (userWasMember) {
         await firebaseRemove(ref(db, `rooms/${roomToLeaveId}/members/${user.uid}`));
-        toast({ title: "Room Left", description: `You have left room ${roomToLeaveId}. Switched to Personal Mode.` });
+        toast({ title: "Room Left", description: `You have left room '${roomToLeaveName || roomToLeaveId}'. Switched to Personal Mode.` });
       } else if (!userWasMember && numberOfMembers > 0) {
-         toast({ title: "Switched to Personal Mode", description: `You were not an active member of room ${roomToLeaveId}.` });
+         toast({ title: "Switched to Personal Mode", description: `You were not an active member of room '${roomToLeaveName || roomToLeaveId}'.` });
          if (userOwnedRoomId === roomToLeaveId) {
             await firebaseRemove(ref(db, `users/${user.uid}/createdRoomId`));
             setUserOwnedRoomId(null);
         }
       }
-      // If !userWasMember && numberOfMembers === 0, room is already gone or user wasn't part of it.
-      // No specific toast here, as the primary action is the switch to personal mode.
-  
     } catch (error) {
       console.error("Error leaving room:", error);
       const e = error as Error & { code?: string };
@@ -227,7 +230,8 @@ export default function BudgetPlannerPage() {
           toast({ variant: "destructive", title: "Error Leaving Room", description: "An error occurred. See console." });
       }
     } finally {
-      setCurrentRoomId(null); 
+      setCurrentRoomId(null);
+      setCurrentRoomName(null); // Clear room name
       setShowRoomModal(false);
       setIsLoadingRoomAction(false);
     }
@@ -236,13 +240,15 @@ export default function BudgetPlannerPage() {
   const handleSwitchToPersonalModeVisualOnly = () => {
     if (!currentRoomId) return;
     const roomLeftBehind = currentRoomId;
+    const roomNameLeftBehind = currentRoomName;
     setCurrentRoomId(null);
+    setCurrentRoomName(null); // Clear room name
     toast({
       title: 'Switched to Personal Mode',
-      description: `You are still a member of room ${roomLeftBehind}.`,
+      description: `You are still a member of room '${roomNameLeftBehind || roomLeftBehind}'.`,
     });
   };
-  
+
   if (authLoading || !user) {
     return (
       <main className="min-h-screen bg-background text-foreground p-4 md:p-8 flex flex-col items-center justify-center font-body">
@@ -253,7 +259,6 @@ export default function BudgetPlannerPage() {
   }
 
   const getPersonalModeButtonDetails = () => {
-    // This function is for when currentRoomId is null
     if (userOwnedRoomId) {
       return { text: 'My Room', icon: <Users className="mr-2 h-4 w-4" /> };
     }
@@ -275,7 +280,7 @@ export default function BudgetPlannerPage() {
             </div>
             <div className="flex flex-col items-center sm:flex-row sm:items-center gap-2 sm:gap-4">
               {user.email && <span className="text-xs text-muted-foreground hidden sm:block">{user.email}</span>}
-              
+
               {currentRoomId ? (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -313,7 +318,7 @@ export default function BudgetPlannerPage() {
           </div>
           {currentRoomId && (
             <CardDescription className="text-center mt-2 text-sm text-muted-foreground">
-              Room Code: <span className="font-semibold text-accent select-all">{currentRoomId}</span> (Real-time Sync)
+              Room: <span className="font-semibold text-accent">{currentRoomName || 'Unnamed Room'}</span> (<span className="font-semibold text-accent select-all">{currentRoomId}</span>) (Real-time Sync)
             </CardDescription>
           )}
            {user.email && <span className="text-xs text-muted-foreground text-center mt-2 block sm:hidden">{user.email}</span>}
@@ -326,22 +331,22 @@ export default function BudgetPlannerPage() {
         {currentYear !== null ? (
           <p>&copy; {currentYear} Summer Budget. Plan your best summer!</p>
         ) : (
-          <p>Loading copyright year...</p> 
+          <p>Loading copyright year...</p>
         )}
       </footer>
-      {user && ( 
+      {user && (
         <RoomModal
           isOpen={showRoomModal}
-          currentRoomId={currentRoomId} // Pass currentRoomId to modal for context
-          userHasActiveOwnedRoom={!!userOwnedRoomId} 
+          currentRoomId={currentRoomId}
+          currentRoomName={currentRoomName} // Pass current room name to modal
+          userHasActiveOwnedRoom={!!userOwnedRoomId}
           onClose={() => setShowRoomModal(false)}
           onCreateRoom={handleCreateRoom}
           onJoinRoom={handleJoinRoom}
-          onLeaveRoom={handleLeaveRoom} // RoomModal's "Leave Room" button should use the main handler now
+          onLeaveRoom={handleLeaveRoom}
           isLoading={isLoadingRoomAction}
         />
       )}
     </main>
   );
 }
-    

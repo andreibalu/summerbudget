@@ -1,7 +1,7 @@
 
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -14,45 +14,58 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Copy, AlertTriangle, Loader2 } from 'lucide-react';
+import { Copy, AlertTriangle, Loader2, Edit3 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { useAuth } from '@/context/AuthContext';
 
 interface RoomModalProps {
   isOpen: boolean;
   currentRoomId: string | null;
-  userHasActiveOwnedRoom: boolean; 
+  currentRoomName: string | null; // Added to display current room name if any
+  userHasActiveOwnedRoom: boolean;
   onClose: () => void;
-  onCreateRoom: () => Promise<string>; 
+  onCreateRoom: (roomName: string) => Promise<string>; // Modified to accept roomName
   onJoinRoom: (roomId: string) => Promise<void>;
   onLeaveRoom: () => Promise<void>;
   isLoading: boolean;
 }
 
-export function RoomModal({ 
-  isOpen, 
-  currentRoomId, 
+export function RoomModal({
+  isOpen,
+  currentRoomId,
+  currentRoomName,
   userHasActiveOwnedRoom,
-  onClose, 
-  onCreateRoom, 
-  onJoinRoom, 
+  onClose,
+  onCreateRoom,
+  onJoinRoom,
   onLeaveRoom,
-  isLoading 
+  isLoading
 }: RoomModalProps) {
   const [joinRoomIdInput, setJoinRoomIdInput] = useState('');
+  const [newRoomNameInput, setNewRoomNameInput] = useState(''); // State for new room name
   const { toast } = useToast();
   const { user } = useAuth();
+
+  useEffect(() => {
+    // Reset new room name input when modal opens/closes or currentRoomId changes
+    if (isOpen) {
+      setNewRoomNameInput(currentRoomId ? (currentRoomName || '') : ''); // Pre-fill if editing, clear if creating
+    } else {
+      setNewRoomNameInput('');
+    }
+  }, [isOpen, currentRoomId, currentRoomName]);
 
   const handleCreateRoomClick = async () => {
     if (!user) {
       toast({ variant: "destructive", title: "Not Authenticated", description: "You must be logged in to create a room." });
       return;
     }
-    // If user has an active owned room and is currently in personal mode,
-    // this button press (via page.tsx) might directly take them to their room
-    // or if they are in another room, it creates a new primary room.
-    // The RoomModal's 'Create New Room' should always attempt to create a new one.
-    await onCreateRoom(); 
+    if (!newRoomNameInput.trim()) {
+      toast({ variant: "destructive", title: "Room Name Required", description: "Please enter a name for your new room." });
+      return;
+    }
+    await onCreateRoom(newRoomNameInput.trim());
+    setNewRoomNameInput(''); // Clear input after creation attempt
   };
 
   const handleJoinRoomClick = async () => {
@@ -67,7 +80,7 @@ export function RoomModal({
         return;
       }
       await onJoinRoom(codeToJoin);
-      setJoinRoomIdInput(''); 
+      setJoinRoomIdInput('');
     } else {
        toast({ variant: "destructive", title: "Input Required", description: "Please enter a room code to join." });
     }
@@ -84,19 +97,22 @@ export function RoomModal({
     }
   };
 
-  if (!user) { 
+  if (!user) {
     return null;
   }
 
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={isOpen} onOpenChange={(open) => {
+      if (!open) setNewRoomNameInput(''); // Clear name input when closing dialog
+      onClose();
+    }}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Share & Join Budget Room</DialogTitle>
           <DialogDescription>
-            {currentRoomId 
-              ? `You are in room: ${currentRoomId}. Data is synced in real-time.`
-              : (userHasActiveOwnedRoom 
+            {currentRoomId
+              ? `You are in room: ${currentRoomName || 'Unnamed Room'} (${currentRoomId}). Data is synced in real-time.`
+              : (userHasActiveOwnedRoom
                   ? "You have an existing room. Click 'My Room' on the main page to access it, or create a new one below (this will become your new primary room)."
                   : "Create a new room for real-time sharing or join one using a code. Your personal budget is private to your account."
                 )}
@@ -113,6 +129,7 @@ export function RoomModal({
                   <span className="sr-only">Copy Room Code</span>
                 </Button>
               </div>
+              {/* Room renaming could be added here later */}
               <Button onClick={onLeaveRoom} variant="destructive" className="w-full mt-4" disabled={isLoading}>
                 {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 Switch to Personal Mode & Leave Room
@@ -120,14 +137,26 @@ export function RoomModal({
             </div>
           ) : (
             <>
+              <div className="space-y-2">
+                 <Label htmlFor="new-room-name" className="text-left">
+                  New Room Name
+                </Label>
+                <Input
+                  id="new-room-name"
+                  value={newRoomNameInput}
+                  onChange={(e) => setNewRoomNameInput(e.target.value)}
+                  placeholder="e.g., Summer Vacation Fund"
+                  disabled={isLoading}
+                />
+              </div>
               <div className="flex flex-col items-center">
-                <Button onClick={handleCreateRoomClick} className="w-full" disabled={isLoading}>
+                <Button onClick={handleCreateRoomClick} className="w-full" disabled={isLoading || !newRoomNameInput.trim()}>
                   {isLoading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                  Create New Shared Room
+                  <Edit3 className="mr-2 h-4 w-4" /> Create New Shared Room
                 </Button>
                 <p className="text-xs text-muted-foreground mt-1">Generates a unique code (e.g., ABC-123) for real-time sync. This will become your primary room.</p>
               </div>
-              
+
               <div className="space-y-2">
                 <Label htmlFor="room-code" className="text-left">
                   Join an Existing Room
@@ -138,7 +167,7 @@ export function RoomModal({
                     value={joinRoomIdInput}
                     onChange={(e) => setJoinRoomIdInput(e.target.value.toUpperCase())}
                     placeholder="e.g., XYZ-789"
-                    maxLength={7} 
+                    maxLength={7}
                     disabled={isLoading}
                   />
                   <Button onClick={handleJoinRoomClick} disabled={isLoading || !joinRoomIdInput.trim() || joinRoomIdInput.trim().length !== 7}>
