@@ -4,7 +4,7 @@
 import * as React from "react"
 import * as ToastPrimitives from "@radix-ui/react-toast"
 import { cva, type VariantProps } from "class-variance-authority"
-import { X, ChevronRight } from "lucide-react" // Added ChevronRight
+import { X, ChevronLeft } from "lucide-react" // Changed ChevronRight to ChevronLeft
 
 import { cn } from "@/lib/utils"
 
@@ -44,7 +44,7 @@ const toastVariants = cva(
 const Toast = React.forwardRef<
   React.ElementRef<typeof ToastPrimitives.Root>,
   React.ComponentPropsWithoutRef<typeof ToastPrimitives.Root> &
-    VariantProps<typeof toastVariants> & { duration?: number } // Added duration prop
+    VariantProps<typeof toastVariants> & { duration?: number }
 >(({ className, variant, children, duration, ...props }, ref) => {
   return (
     <ToastPrimitives.Root
@@ -52,13 +52,13 @@ const Toast = React.forwardRef<
       className={cn(toastVariants({ variant }), className)}
       {...props}
     >
-      {children} {/* Title, desc, action, close button are rendered here by Toaster */}
+      {children}
 
       {/* Swipe Hint Arrow - only for toasts with duration */}
       {duration && (
-        <ChevronRight
+        <ChevronLeft // Changed to ChevronLeft
           aria-hidden="true"
-          className="swipe-hint-arrow pointer-events-none absolute left-3 top-1/2 h-5 w-5 text-foreground/60"
+          className="swipe-hint-arrow pointer-events-none absolute right-3 top-1/2 h-5 w-5 text-foreground/60" // Changed left-3 to right-3
         />
       )}
 
@@ -97,7 +97,7 @@ const ToastClose = React.forwardRef<
   <ToastPrimitives.Close
     ref={ref}
     className={cn(
-      "absolute right-2 top-2 rounded-md p-1 text-foreground/50 opacity-0 transition-opacity hover:text-foreground focus:opacity-100 focus:outline-none focus:ring-2 group-hover:opacity-100 group-[.destructive]:text-red-300 group-[.destructive]:hover:text-red-50 group-[.destructive]:focus:ring-red-400 group-[.destructive]:focus:ring-offset-red-600",
+      "absolute right-2 top-2 rounded-md p-1 text-foreground/50 opacity-0 transition-opacity hover:text-foreground focus:opacity-100 focus:ring-2 group-hover:opacity-100 group-[.destructive]:text-red-300 group-[.destructive]:hover:text-red-50 group-[.destructive]:focus:ring-red-400 group-[.destructive]:focus:ring-offset-red-600",
       className
     )}
     toast-close=""
