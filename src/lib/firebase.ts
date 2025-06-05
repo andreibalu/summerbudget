@@ -1,7 +1,7 @@
 
 import { initializeApp, getApp, getApps, type FirebaseApp } from "firebase/app";
 import { getDatabase, type Database } from "firebase/database";
-import { getAuth, type Auth } from "firebase/auth"; // Import getAuth
+import { getAuth, type Auth, GoogleAuthProvider } from "firebase/auth"; // Import GoogleAuthProvider
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -15,7 +15,8 @@ const firebaseConfig = {
 
 let firebaseApp: FirebaseApp;
 let db: Database | null = null;
-let auth: Auth | null = null; // Declare auth
+let auth: Auth | null = null; 
+export let googleAuthProvider: GoogleAuthProvider | null = null; // Export GoogleAuthProvider instance
 
 if (typeof window !== "undefined") { // Ensure Firebase is initialized only on the client-side
   if (!getApps().length) {
@@ -31,7 +32,8 @@ if (typeof window !== "undefined") { // Ensure Firebase is initialized only on t
   if (firebaseApp! && firebaseApp.options?.projectId) {
     try {
       db = getDatabase(firebaseApp);
-      auth = getAuth(firebaseApp); // Initialize auth
+      auth = getAuth(firebaseApp); 
+      googleAuthProvider = new GoogleAuthProvider(); // Initialize GoogleAuthProvider
     } catch (error) {
       console.error("Firebase Database/Auth initialization error:", error);
     }
@@ -41,4 +43,4 @@ if (typeof window !== "undefined") { // Ensure Firebase is initialized only on t
 }
 
 
-export { firebaseApp, db, auth }; // Export auth
+export { firebaseApp, db, auth };

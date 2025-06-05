@@ -2,9 +2,9 @@
 "use client";
 
 import type { User, AuthError } from 'firebase/auth';
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut, onAuthStateChanged } from 'firebase/auth';
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut as firebaseSignOut, onAuthStateChanged, signInWithPopup } from 'firebase/auth';
 import React, { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
-import { auth } from '@/lib/firebase';
+import { auth, googleAuthProvider } from '@/lib/firebase'; // Import googleAuthProvider
 import { useToast } from '@/hooks/use-toast';
 import { useRouter } from 'next/navigation';
 
@@ -13,6 +13,7 @@ interface AuthContextType {
   loading: boolean;
   signUp: (email: string, pass: string) => Promise<User | null | AuthError >;
   signIn: (email: string, pass: string) => Promise<User | null | AuthError >;
+  signInWithGoogle: () => Promise<User | null | AuthError>; // Added
   signOut: () => Promise<void>;
 }
 
@@ -27,7 +28,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     if (!auth) {
       setLoading(false);
-      // toast({ variant: "destructive", title: "Auth Error", description: "Firebase Auth not available." }); // Keep for critical init issues
       return;
     }
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -35,7 +35,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setLoading(false);
     });
     return () => unsubscribe();
-  }, [toast]); // toast dependency can be removed if no toast is called here
+  }, []);
 
   const signUp = async (email: string, pass: string): Promise<User | null | AuthError > => {
     if (!auth) {
@@ -47,7 +47,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
       setUser(userCredential.user);
-      // Success toast removed: toast({ title: "Sign Up Successful", description: "Welcome!" });
       return userCredential.user;
     } catch (error) {
       const authError = error as AuthError;
@@ -68,11 +67,35 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, pass);
       setUser(userCredential.user);
-      // Success toast removed: toast({ title: "Sign In Successful", description: "Welcome back!" });
       return userCredential.user;
     } catch (error) {
       const authError = error as AuthError;
       toast({ variant: "destructive", title: "Sign In Failed", description: authError.message });
+      return authError;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const signInWithGoogle = async (): Promise<User | null | AuthError> => {
+    if (!auth || !googleAuthProvider) {
+      const error = { code: "auth/unavailable", message: "Google Authentication service is not available." } as AuthError;
+      toast({ variant: "destructive", title: "Google Sign In Error", description: error.message });
+      return error;
+    }
+    setLoading(true);
+    try {
+      const userCredential = await signInWithPopup(auth, googleAuthProvider);
+      setUser(userCredential.user);
+      return userCredential.user;
+    } catch (error) {
+      const authError = error as AuthError;
+      // Handle specific Google sign-in errors, e.g., popup closed by user
+      if (authError.code === 'auth/popup-closed-by-user') {
+        toast({ variant: "default", title: "Google Sign In", description: "Sign-in process was cancelled." });
+      } else {
+        toast({ variant: "destructive", title: "Google Sign In Failed", description: authError.message });
+      }
       return authError;
     } finally {
       setLoading(false);
@@ -88,7 +111,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       await firebaseSignOut(auth);
       setUser(null);
-      // Success toast removed: toast({ title: "Signed Out", description: "You have been successfully signed out." });
       router.push('/login');
     } catch (error) {
       const authError = error as AuthError;
@@ -99,7 +121,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, signUp, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, loading, signUp, signIn, signInWithGoogle, signOut }}>
       {children}
     </AuthContext.Provider>
   );
