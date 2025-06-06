@@ -84,10 +84,24 @@ export function BudgetPlannerClient({ currentRoomId, user }: BudgetPlannerClient
       setBudgetData(dataToSet);
       setIsDataLoaded(true);
     }, (error) => {
+      const isRoomPath = dataPath?.startsWith('rooms/');
+      const isPermissionDenied = (error as Error & { code?: string }).code === 'PERMISSION_DENIED';
+
+      // Suppress console log and toast for PERMISSION_DENIED on a room path IF we are no longer in a room mode
+      if (isPermissionDenied && isRoomPath && !currentRoomId) {
+        // This is likely the scenario of leaving a room, listener fires one last time.
+        // No console log or toast needed here.
+        setIsDataLoaded(true); // Ensure UI isn't stuck loading
+        setBudgetData(initialBudgetData); // Reset to avoid showing stale data
+        return;
+      }
+      
+      // Log other errors
       console.error(`Firebase onValue error for path: ${dataPath}`, error);
+
       const contextDescription = currentRoomId ? `room '${currentRoomId}'` : "personal budget";
       let errorDescription = `Could not load data for ${contextDescription}.`;
-      if ((error as Error & { code?: string }).code === 'PERMISSION_DENIED') {
+      if (isPermissionDenied) {
           errorDescription = `Permission denied for ${contextDescription}. Ensure you are a member or have access.`;
       }
       toast({ 
@@ -264,7 +278,9 @@ export function BudgetPlannerClient({ currentRoomId, user }: BudgetPlannerClient
         onDeleteTransaction={handleDeleteTransaction}
         onFinancialGoalChange={handleFinancialGoalChange}
         carryOverDetails={carryOverDetails}
+        user={user}
       />
     </div>
   );
 }
+
