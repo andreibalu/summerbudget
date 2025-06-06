@@ -1,32 +1,22 @@
 
 "use client";
 
-import React from 'react';
-import { AuthForm } from '@/components/auth/AuthForm';
-import { useAuth } from '@/context/AuthContext';
+import React, { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import type { AuthError } from 'firebase/auth';
+import { useAuth } from '@/context/AuthContext'; // Keep to potentially see if user is loaded before redirecting
 
 export default function LoginPage() {
-  const { signIn, loading, user } = useAuth();
   const router = useRouter();
+  const { loading: authLoading, user } = useAuth();
 
-  React.useEffect(() => {
-    if (user) {
-      router.replace('/'); // Redirect to budget planner if already logged in
+  useEffect(() => {
+    // This page is obsolete. Always redirect to the main page.
+    // The main page will handle showing login prompts if the user is not authenticated.
+    if (!authLoading) { // Wait for auth state to be resolved before redirecting
+        router.replace('/');
     }
-  }, [user, router]);
+  }, [router, authLoading, user]);
 
-  const handleSignIn = async (values: { email: string; password: string }) => {
-    const result = await signIn(values.email, values.password);
-    // Check if result is a User object (successful login)
-    if (result && 'uid' in result) {
-        router.push('/');
-    }
-    // Error handling is done within useAuth hook via toasts
-  };
-  
-  if(user) return null; // Prevent flash of content if user is already logged in and redirecting
-
-  return <AuthForm onSubmit={handleSignIn} loading={loading} />;
+  // Render null or a minimal loader while auth state is resolving and redirecting
+  return null;
 }
