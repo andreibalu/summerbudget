@@ -7,13 +7,12 @@ import { RoomModal } from '@/components/budget/RoomModal';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
-import { Leaf, Users, User, Loader2, MenuIcon, UserSquare, DoorOpen, Power } from 'lucide-react';
+import { Leaf, Users, Loader2, MenuIcon, UserSquare, DoorOpen, Power } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { db } from '@/lib/firebase';
 import { ref, set as firebaseSet, get, remove as firebaseRemove, serverTimestamp } from "firebase/database";
 import { initialBudgetData } from '@/lib/types';
 import { useAuth } from '@/context/AuthContext';
-import { useRouter } from 'next/navigation'; 
 import { LogoutButton } from '@/components/auth/LogoutButton';
 
 function generateRoomCode(): string {
@@ -35,8 +34,7 @@ export default function BudgetPlannerPage() {
   const [userOwnedRoomId, setUserOwnedRoomId] = useState<string | null>(null);
   const [isLoadingRoomAction, setIsLoadingRoomAction] = useState(false);
   const { toast } = useToast();
-  const { user, loading: authLoading, signInWithGoogle, signOut } = useAuth(); 
-  const router = useRouter();
+  const { user, loading: authLoading, signInWithGoogle } = useAuth(); 
 
 
   useEffect(() => {
@@ -52,13 +50,14 @@ export default function BudgetPlannerPage() {
           if (typeof ownedRoom === 'string') {
              setUserOwnedRoomId(ownedRoom);
           } else {
-            setUserOwnedRoomId(null);
+            setUserOwnedRoomId(null); // Clear if not a string
           }
         } else {
           setUserOwnedRoomId(null);
         }
       }).catch(error => {
         console.error("Error fetching user's created room ID:", error);
+        setUserOwnedRoomId(null); // Ensure reset on error
       });
     } else {
       setUserOwnedRoomId(null);
@@ -68,15 +67,21 @@ export default function BudgetPlannerPage() {
 
   const handleRoomModeButtonClick = async () => {
     if (!user || !db) {
-      toast({ variant: "destructive", title: "Error", description: "Authentication or database not available." });
       return;
     }
 
     setIsLoadingRoomAction(true);
     try {
       if (currentRoomId) { 
-        setCurrentRoomId(null);
-        setCurrentRoomName(null);
+        // Already in a room, pressing the button likely means "go to personal/options"
+        // This case is handled by DropdownMenu options now.
+        // For safety, if this function is called while in a room (e.g. direct call not from menu),
+        // it could default to opening the room modal or switching to personal.
+        // For now, assume the dropdown handles "in room" actions.
+        // If we want "My Room" button to switch to Personal if currently in a different room:
+        // setCurrentRoomId(null); 
+        // setCurrentRoomName(null);
+        // But this isn't the current flow. The button text/action changes.
       } else if (userOwnedRoomId) { 
           const roomRef = ref(db, `rooms/${userOwnedRoomId}`);
           const snapshot = await get(roomRef);
@@ -91,10 +96,11 @@ export default function BudgetPlannerPage() {
               setCurrentRoomId(userOwnedRoomId);
               setCurrentRoomName(roomData.meta?.roomName || null);
           } else { 
+              // Owned room ID exists but room itself doesn't in DB. Clean up.
               await firebaseRemove(ref(db, `users/${user.uid}/createdRoomId`));
               setUserOwnedRoomId(null); 
               setCurrentRoomName(null);
-              toast({ variant: "default", title: "Room Not Found", description: "Your previously owned room seems to be gone. Opening room options." });
+              // toast({ variant: "default", title: "Room Not Found", description: "Your previously owned room seems to be gone. Opening room options." });
               setShowRoomModal(true); 
           }
       } else { 
@@ -102,13 +108,13 @@ export default function BudgetPlannerPage() {
       }
     } catch (error) {
         console.error("Error in room mode button click:", error);
-        toast({ variant: "destructive", title: "Operation Failed", description: "An unexpected error occurred while handling room mode." });
+        // toast({ variant: "destructive", title: "Operation Failed", description: "An unexpected error occurred while handling room mode." });
     } finally {
         setIsLoadingRoomAction(false);
     }
   };
 
-  const handleCreateRoom = async (roomName: string) => {
+  const handleCreateRoom = async (roomName: string): Promise<string> => {
     if (!db || !user) {
       toast({ variant: "destructive", title: "Error", description: "Cannot create room. Database or user not available." });
       return "";
@@ -124,27 +130,25 @@ export default function BudgetPlannerPage() {
 
     try {
       await firebaseSet(ref(db, `rooms/${newRoomId}`), newRoomData);
-      
-      if(userOwnedRoomId && userOwnedRoomId !== newRoomId) {
-      }
       await firebaseSet(ref(db, `users/${user.uid}/createdRoomId`), newRoomId);
 
       setCurrentRoomId(newRoomId);
       setCurrentRoomName(roomName);
       setUserOwnedRoomId(newRoomId); 
       setShowRoomModal(false);
+      return newRoomId;
     } catch (error) {
       console.error("Failed to create room in Firebase:", error);
       const e = error as Error & { code?: string };
       if (e.code === 'PERMISSION_DENIED') {
-          toast({ variant: "destructive", title: "Permission Denied", description: "Could not create room. Check Firebase rules."});
+          // toast({ variant: "destructive", title: "Permission Denied", description: "Could not create room. Check Firebase rules."});
       } else {
-          toast({ variant: "destructive", title: "Room Creation Failed", description: "Could not create the room. Check console." });
+          // toast({ variant: "destructive", title: "Room Creation Failed", description: "Could not create the room. Check console." });
       }
+      return "";
     } finally {
       setIsLoadingRoomAction(false);
     }
-    return newRoomId;
   };
 
   const handleJoinRoom = async (roomIdToJoin: string) => {
@@ -165,6 +169,14 @@ export default function BudgetPlannerPage() {
         const roomData = snapshot.val();
         const membersRef = ref(db, `rooms/${upperRoomId}/members/${user.uid}`);
         await firebaseSet(membersRef, true);
+
+        // Confirmation step: try to read the membership back
+        const memberSnapshot = await get(membersRef);
+        if (memberSnapshot.val() !== true) {
+            console.error("Failed to confirm membership immediately after joining for room:", upperRoomId);
+            throw new Error("Membership confirmation failed post-join. Rules might not have propagated or write failed silently.");
+        }
+
         setCurrentRoomId(upperRoomId);
         setCurrentRoomName(roomData.meta?.roomName || null);
         setShowRoomModal(false);
@@ -175,9 +187,9 @@ export default function BudgetPlannerPage() {
       console.error("Error joining room:", error);
       const e = error as Error & { code?: string };
       if (e.code === 'PERMISSION_DENIED') {
-          toast({ variant: "destructive", title: "Permission Denied", description: "Could not join room. You might not have permission to write to the members list."});
+          toast({ variant: "destructive", title: "Permission Denied", description: "Could not join room. You might not have permission to write to the members list, or read confirmation failed."});
       } else {
-        toast({ variant: "destructive", title: "Error Joining Room", description: "Could not verify or join room." });
+        toast({ variant: "destructive", title: "Error Joining Room", description: (error as Error).message || "Could not verify or join room." });
       }
     } finally {
       setIsLoadingRoomAction(false);
@@ -194,6 +206,7 @@ export default function BudgetPlannerPage() {
 
     const roomToLeaveId = currentRoomId;
     
+    // Optimistically update UI first
     setCurrentRoomId(null);
     setCurrentRoomName(null);
     setShowRoomModal(false); 
@@ -218,10 +231,10 @@ export default function BudgetPlannerPage() {
       }
     } catch (error) {
       console.error("Error leaving/deleting room:", error);
-      const e = error as Error & { code?: string };
-      if (e.code === 'PERMISSION_DENIED') {
-      } else {
-      }
+      // const e = error as Error & { code?: string };
+      // if (e.code === 'PERMISSION_DENIED') {
+      // } else {
+      // }
     } finally {
       setIsLoadingRoomAction(false);
     }
@@ -314,10 +327,7 @@ export default function BudgetPlannerPage() {
                       Leave Current Room
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
-                    <DropdownMenuItem onClick={signOut} disabled={isLoadingRoomAction || authLoading}>
-                       {authLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Power className="mr-2 h-4 w-4" />}
-                      Logout
-                    </DropdownMenuItem>
+                    <LogoutButton />
                   </DropdownMenuContent>
                 </DropdownMenu>
               ) : (
@@ -366,3 +376,5 @@ export default function BudgetPlannerPage() {
   );
 }
     
+
+  
