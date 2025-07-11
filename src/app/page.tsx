@@ -218,10 +218,24 @@ export default function BudgetPlannerPage() {
       return;
     }
 
-    // Check if user is the last member - show warning dialog
-    if (isLastMember) {
-      setShowLastMemberWarning(true);
-      return;
+    try {
+      // Check actual room membership count to determine if user is the last member
+      const roomRef = ref(db, `rooms/${currentRoomId}`);
+      const snapshot = await get(roomRef);
+      
+      if (snapshot.exists()) {
+        const roomData = snapshot.val();
+        const members = roomData.members || {};
+        const activeMemberIds = Object.keys(members).filter(uid => members[uid] === true);
+        
+        // Check if user is the last actual member (not just active presence)
+        if (activeMemberIds.length === 1 && activeMemberIds[0] === user.uid) {
+          setShowLastMemberWarning(true);
+          return;
+        }
+      }
+    } catch (error) {
+      console.error("Error checking room membership:", error);
     }
 
     // Proceed with normal leave operation

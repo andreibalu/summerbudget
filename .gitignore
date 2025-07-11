@@ -41,6 +41,6 @@ next-env.d.ts
 .env*
 
 # firebase
-firebaserules.md
+firebaserules.json
 firebase-debug.log
 firestore-debug.log

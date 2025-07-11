@@ -37,16 +37,16 @@ export function LastMemberWarningDialog({
             <AlertDialogTitle>Delete Room Permanently?</AlertDialogTitle>
           </div>
           <AlertDialogDescription className="space-y-2">
-            <p>
+            <div>
               You are the last member in room <strong>"{roomName || 'Unnamed Room'}"</strong> ({roomId}).
-            </p>
-            <p>
+            </div>
+            <div>
               <strong>Leaving this room will delete it permanently</strong>, including all budget data, 
               transaction history, and shared information.
-            </p>
-            <p className="text-muted-foreground">
+            </div>
+            <div className="text-muted-foreground">
               This action cannot be undone. Are you sure you want to proceed?
-            </p>
+            </div>
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
