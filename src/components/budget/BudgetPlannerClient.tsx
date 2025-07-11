@@ -129,9 +129,11 @@ export function BudgetPlannerClient({ currentRoomId, user }: BudgetPlannerClient
         const dataRefForCheck = dbRef(db, dataPath);
         get(dataRefForCheck).then(snapshot => {
             if (!snapshot.exists()) {
-                 firebaseSet(dbRef(db, dataPath), budgetData).catch(error => {
-                    console.error("Failed to sync initial data to Firebase:", error);
-                 });
+                 if (db) {
+                   firebaseSet(dbRef(db, dataPath), budgetData).catch(error => {
+                      console.error("Failed to sync initial data to Firebase:", error);
+                   });
+                 }
             }
         });
         return; 
@@ -234,14 +236,7 @@ export function BudgetPlannerClient({ currentRoomId, user }: BudgetPlannerClient
     });
   };
 
-  const handleFinancialGoalChange = (month: MonthKey, goal: string) => {
-    setBudgetData((prevData) => {
-      const safePrevData = Object.keys(prevData || {}).length > 0 ? prevData : initialBudgetData;
-      const currentMonthData = safePrevData[month] ? { ...safePrevData[month] } : { ...initialBudgetData[month] };
-      currentMonthData.financialGoal = goal;
-      return { ...safePrevData, [month]: currentMonthData };
-    });
-  };
+
   
   if (!user?.uid || !isDataLoaded) { 
     return <div className="text-center p-8"><Loader2 className="mx-auto h-12 w-12 animate-spin text-primary" /> <p className="mt-2">Loading budget data...</p></div>; 
@@ -276,9 +271,7 @@ export function BudgetPlannerClient({ currentRoomId, user }: BudgetPlannerClient
         data={budgetData[activeMonth] || { ...initialBudgetData[activeMonth] }} 
         onAddTransaction={handleAddTransaction}
         onDeleteTransaction={handleDeleteTransaction}
-        onFinancialGoalChange={handleFinancialGoalChange}
         carryOverDetails={carryOverDetails}
-        user={user}
       />
     </div>
   );

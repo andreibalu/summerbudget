@@ -1,0 +1,33 @@
+---
+alwaysApply: true
+description: Summer Sprout Budget - Core project overview and architecture
+---
+
+# Summer Sprout Budget - Project Overview
+
+This is a **Summer Sprout Budget** application - a collaborative budget management tool with the following core architecture:
+
+## Core Features
+- **Interactive Calendar Interface**: User-friendly calendar with tabs for June, July, August, and September
+- **Real-time Budget Management**: Editable spending/income tracking with automatic balance calculations
+- **Collaborative Budget Rooms**: Shared budget rooms with unique codes (e.g., `ABC-123`) for real-time collaboration
+- **Personal and Shared Modes**: Users can switch between personal budgets and shared rooms
+
+## Technical Stack
+- **Frontend**: Next.js 14+ with React, TypeScript
+- **Backend**: Firebase (Authentication + Firestore)
+- **Styling**: Tailwind CSS with shadcn/ui components
+- **State Management**: React Context ([AuthContext.tsx](mdc:src/context/AuthContext.tsx))
+
+## Key Files & Structure
+- **Main App**: [layout.tsx](mdc:src/app/layout.tsx), [page.tsx](mdc:src/app/page.tsx)
+- **Authentication**: [login/page.tsx](mdc:src/app/login/page.tsx), [signup/page.tsx](mdc:src/app/signup/page.tsx)
+- **Budget Components**: [BudgetPlannerClient.tsx](mdc:src/components/budget/BudgetPlannerClient.tsx), [MonthView.tsx](mdc:src/components/budget/MonthView.tsx)
+- **Firebase Config**: [firebase.ts](mdc:src/lib/firebase.ts)
+- **Types**: [types.ts](mdc:src/lib/types.ts)
+
+## Authentication Flow
+Users must sign up/login via Firebase Auth to access personal budgets and create/join shared rooms.
+
+## Data Model
+Budget data includes transactions, room information, and user collaboration features stored in Firestore.

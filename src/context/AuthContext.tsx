@@ -37,7 +37,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         // we want to respect the manual sign-out.
         // Force setUser(null) and ensure the flag is reset.
         setUser(null); 
-        if (!signOutInProgress.current) { // Prevent re-entrant signout
+        if (!signOutInProgress.current && auth) { // Prevent re-entrant signout
             firebaseSignOut(auth).catch(err => {
                  console.error("Error during forced re-signout:", err);
             });

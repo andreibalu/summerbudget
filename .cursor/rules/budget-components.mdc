@@ -1,0 +1,49 @@
+---
+globs: src/components/budget/*,src/app/page.tsx
+description: Budget management components and feature patterns
+---
+
+# Summer Sprout Budget - Budget Components & Features
+
+## Core Budget Components
+- **[BudgetPlannerClient.tsx](mdc:src/components/budget/BudgetPlannerClient.tsx)**: Main budget interface with calendar tabs
+- **[MonthView.tsx](mdc:src/components/budget/MonthView.tsx)**: Individual month display with transactions
+- **[TransactionForm.tsx](mdc:src/components/budget/TransactionForm.tsx)**: Add/edit income and spending entries
+- **[TransactionList.tsx](mdc:src/components/budget/TransactionList.tsx)**: Display and manage transaction history
+- **[BalanceDisplay.tsx](mdc:src/components/budget/BalanceDisplay.tsx)**: Real-time balance calculations
+- **[RoomModal.tsx](mdc:src/components/budget/RoomModal.tsx)**: Create/join shared budget rooms
+
+## Calendar Interface Requirements
+- **Monthly Tabs**: June, July, August, September navigation
+- **Responsive Design**: Seamless experience across mobile, tablet, desktop
+- **Card Layout**: Apply card-style containers throughout
+- **Smooth Transitions**: Gentle animations for month switching
+
+## Transaction Management
+- **Real-time Updates**: Instant balance recalculation on data entry
+- **Editable Tables**: Direct editing of spending and income entries
+- **Data Validation**: Ensure proper number formatting and date validation
+- **Categorization**: Support for different spending/income categories
+
+## Collaborative Features
+- **Room Creation**: Generate unique room codes (format: `ABC-123`)
+- **Real-time Sync**: Live updates across all room participants
+- **Personal vs Shared**: Clear UI distinction between modes
+- **Access Control**: Proper permission handling for shared rooms
+
+## Calculation Logic
+- **Automatic Balance**: `Total Income - Total Spending = Remaining Balance`
+- **Monthly Breakdown**: Per-month calculations with carryover
+- **Real-time Updates**: Immediate recalculation on any data change
+- **Error Handling**: Graceful handling of invalid inputs
+
+## User Experience Patterns
+- **Loading States**: Show progress during data operations
+- **Error Messages**: Clear feedback for validation issues
+- **Success Feedback**: Confirmation for successful operations
+- **Intuitive Navigation**: Easy switching between personal and shared budgets
+
+## Integration Requirements
+- Must integrate with Firebase for data persistence
+- Respect authentication state from [AuthContext.tsx](mdc:src/context/AuthContext.tsx)
+- Follow UI guidelines for consistent styling and theming

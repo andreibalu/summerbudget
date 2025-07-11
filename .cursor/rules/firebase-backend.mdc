@@ -1,0 +1,47 @@
+---
+globs: src/lib/firebase.ts,src/context/AuthContext.tsx,src/lib/types.ts,src/components/auth/*
+description: Firebase integration and backend patterns for Summer Sprout Budget
+---
+
+# Summer Sprout Budget - Firebase & Backend Patterns
+
+## Firebase Configuration
+Configuration is centralized in [firebase.ts](mdc:src/lib/firebase.ts) and includes:
+- **Authentication**: Firebase Auth for user signup/login
+- **Firestore**: Database for budget data, transactions, and room sharing
+- **Real-time Updates**: Live synchronization for collaborative rooms
+
+## Authentication System
+- **Context**: [AuthContext.tsx](mdc:src/context/AuthContext.tsx) manages global auth state
+- **Auth Components**: [AuthForm.tsx](mdc:src/components/auth/AuthForm.tsx), [LogoutButton.tsx](mdc:src/components/auth/LogoutButton.tsx)
+- **Protected Routes**: Budget features require authentication
+- **User Sessions**: Persistent login across browser sessions
+
+## Data Structure & Types
+Defined in [types.ts](mdc:src/lib/types.ts):
+- **User**: User profile and authentication data
+- **Transaction**: Income and spending entries with dates
+- **Room**: Shared budget room with unique codes
+- **Budget**: Monthly budget data with calculations
+
+## Firestore Collections
+- `users/`: User profiles and settings
+- `rooms/`: Shared budget rooms with access control
+- `transactions/`: All income/spending entries
+- `budgets/`: Monthly budget summaries
+
+## Real-time Features
+- **Live Updates**: Changes in shared rooms sync instantly
+- **Collaborative Editing**: Multiple users can edit simultaneously
+- **Room Codes**: Unique identifiers (e.g., `ABC-123`) for joining rooms
+
+## Security Rules
+- Users can only access their own data and rooms they're members of
+- Room access controlled by membership lists
+- Transaction data tied to user authentication
+
+## Best Practices
+- Always handle Firebase errors gracefully
+- Use TypeScript types for all Firebase operations
+- Implement loading states for async operations
+- Cache data appropriately to reduce Firebase reads

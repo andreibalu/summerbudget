@@ -4,13 +4,15 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { BudgetPlannerClient } from '@/components/budget/BudgetPlannerClient';
 import { RoomModal } from '@/components/budget/RoomModal';
+import { LastMemberWarningDialog } from '@/components/budget/LastMemberWarningDialog';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Leaf, Users, Loader2, MenuIcon, UserSquare, DoorOpen, Power } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { useRoomPresence } from '@/hooks/useRoomPresence';
 import { db } from '@/lib/firebase';
-import { ref, set as firebaseSet, get, remove as firebaseRemove, serverTimestamp } from "firebase/database";
+import { ref, set as firebaseSet, get, remove as firebaseRemove, serverTimestamp, runTransaction } from "firebase/database";
 import { initialBudgetData } from '@/lib/types';
 import { useAuth } from '@/context/AuthContext';
 import { LogoutButton } from '@/components/auth/LogoutButton';
@@ -33,8 +35,10 @@ export default function BudgetPlannerPage() {
   const [currentRoomName, setCurrentRoomName] = useState<string | null>(null);
   const [userOwnedRoomId, setUserOwnedRoomId] = useState<string | null>(null);
   const [isLoadingRoomAction, setIsLoadingRoomAction] = useState(false);
+  const [showLastMemberWarning, setShowLastMemberWarning] = useState(false);
   const { toast } = useToast();
-  const { user, loading: authLoading, signInWithGoogle } = useAuth(); 
+  const { user, loading: authLoading, signInWithGoogle } = useAuth();
+  const { activeMembers, memberCount, isLastMember, joinRoom, leaveRoom } = useRoomPresence(user, currentRoomId); 
 
 
   useEffect(() => {
@@ -95,6 +99,9 @@ export default function BudgetPlannerPage() {
               }
               setCurrentRoomId(userOwnedRoomId);
               setCurrentRoomName(roomData.meta?.roomName || null);
+              
+              // Join the room presence tracking
+              joinRoom(userOwnedRoomId);
           } else { 
               // Owned room ID exists but room itself doesn't in DB. Clean up.
               await firebaseRemove(ref(db, `users/${user.uid}/createdRoomId`));
@@ -136,6 +143,10 @@ export default function BudgetPlannerPage() {
       setCurrentRoomName(roomName);
       setUserOwnedRoomId(newRoomId); 
       setShowRoomModal(false);
+      
+      // Join the room presence tracking
+      joinRoom(newRoomId);
+      
       return newRoomId;
     } catch (error) {
       console.error("Failed to create room in Firebase:", error);
@@ -180,6 +191,9 @@ export default function BudgetPlannerPage() {
         setCurrentRoomId(upperRoomId);
         setCurrentRoomName(roomData.meta?.roomName || null);
         setShowRoomModal(false);
+        
+        // Join the room presence tracking
+        joinRoom(upperRoomId);
       } else {
         toast({ variant: "destructive", title: "Room Not Found", description: `Room ${upperRoomId} does not exist.` });
       }
@@ -204,37 +218,99 @@ export default function BudgetPlannerPage() {
       return;
     }
 
+    // Check if user is the last member - show warning dialog
+    if (isLastMember) {
+      setShowLastMemberWarning(true);
+      return;
+    }
+
+    // Proceed with normal leave operation
+    await performLeaveRoom();
+  };
+
+  const performLeaveRoom = async () => {
+    if (!db || !user || !currentRoomId) return;
+
     const roomToLeaveId = currentRoomId;
     
-    // Optimistically update UI first
+    // Update presence first
+    leaveRoom(roomToLeaveId);
+    
+    // Optimistically update UI
     setCurrentRoomId(null);
     setCurrentRoomName(null);
     setShowRoomModal(false); 
+    setShowLastMemberWarning(false);
 
     setIsLoadingRoomAction(true);
 
     try {
-      const membersRef = ref(db, `rooms/${roomToLeaveId}/members`);
-      const membersSnapshot = await get(membersRef);
-      const currentMembers = membersSnapshot.exists() ? membersSnapshot.val() : {};
-      const numberOfMembers = Object.keys(currentMembers).length;
-      const userWasMember = currentMembers.hasOwnProperty(user.uid);
-
-      if (userWasMember && numberOfMembers === 1 && currentMembers[user.uid]) {
-        await firebaseRemove(ref(db, `rooms/${roomToLeaveId}`));
-        if (userOwnedRoomId === roomToLeaveId) { 
-          await firebaseRemove(ref(db, `users/${user.uid}/createdRoomId`));
-          setUserOwnedRoomId(null); 
+      // Use a transaction to atomically check and update membership
+      const roomRef = ref(db, `rooms/${roomToLeaveId}`);
+      const result = await runTransaction(roomRef, (currentRoomData) => {
+        if (!currentRoomData) {
+          // Room doesn't exist anymore
+          return null;
         }
-      } else if (userWasMember) {
-        await firebaseRemove(ref(db, `rooms/${roomToLeaveId}/members/${user.uid}`));
+
+        const members = currentRoomData.members || {};
+        const memberIds = Object.keys(members).filter(uid => members[uid] === true);
+        
+        if (!members[user.uid]) {
+          // User is not a member anymore
+          return currentRoomData;
+        }
+
+        // Remove the user from members
+        delete members[user.uid];
+        const remainingMembers = Object.keys(members).filter(uid => members[uid] === true);
+
+        if (remainingMembers.length === 0) {
+          // No members left, delete the room
+          return null;
+        } else {
+          // Update the room with user removed
+          return {
+            ...currentRoomData,
+            members: members
+          };
+        }
+      });
+
+      if (result.committed) {
+        if (!result.snapshot.exists()) {
+          // Room was deleted
+          if (userOwnedRoomId === roomToLeaveId) { 
+            await firebaseRemove(ref(db, `users/${user.uid}/createdRoomId`));
+            setUserOwnedRoomId(null); 
+          }
+          toast({ 
+            title: "Room Deleted", 
+            description: `Room "${currentRoomName || 'Unnamed Room'}" has been permanently deleted.` 
+          });
+        } else {
+          // User was removed from room
+          toast({ 
+            title: "Left Room", 
+            description: `You have left room "${currentRoomName || 'Unnamed Room'}".` 
+          });
+        }
+      } else {
+        // Transaction failed due to conflict, retry might be needed
+        console.warn("Room leave transaction failed, room state may have changed");
+        toast({ 
+          variant: "destructive", 
+          title: "Operation Failed", 
+          description: "Room state changed during operation. Please try again." 
+        });
       }
     } catch (error) {
       console.error("Error leaving/deleting room:", error);
-      // const e = error as Error & { code?: string };
-      // if (e.code === 'PERMISSION_DENIED') {
-      // } else {
-      // }
+      toast({ 
+        variant: "destructive", 
+        title: "Error", 
+        description: "Failed to leave room. Please try again." 
+      });
     } finally {
       setIsLoadingRoomAction(false);
     }
@@ -242,9 +318,54 @@ export default function BudgetPlannerPage() {
 
   const handleSwitchToPersonalModeVisualOnly = () => {
     if (!currentRoomId) return; 
+    
+    // Leave room presence tracking
+    if (currentRoomId) {
+      leaveRoom(currentRoomId);
+    }
+    
     setCurrentRoomId(null);
     setCurrentRoomName(null);
   };
+
+  // Handle edge case: room becomes unavailable while user is in it
+  useEffect(() => {
+    if (!currentRoomId || !db || !user) return;
+
+    const roomRef = ref(db, `rooms/${currentRoomId}`);
+    const checkRoomExists = async () => {
+      try {
+        const snapshot = await get(roomRef);
+        if (!snapshot.exists()) {
+          // Room was deleted, switch to personal mode
+          setCurrentRoomId(null);
+          setCurrentRoomName(null);
+          toast({
+            variant: "destructive",
+            title: "Room No Longer Exists",
+            description: "The room you were in has been deleted. Switched to personal mode."
+          });
+        }
+      } catch (error) {
+        const e = error as Error & { code?: string };
+        if (e.code === 'PERMISSION_DENIED') {
+          // User was removed from room
+          setCurrentRoomId(null);
+          setCurrentRoomName(null);
+          toast({
+            variant: "destructive", 
+            title: "Removed from Room",
+            description: "You no longer have access to this room. Switched to personal mode."
+          });
+        }
+      }
+    };
+
+    // Check room existence periodically (every 30 seconds)
+    const interval = setInterval(checkRoomExists, 30000);
+    
+    return () => clearInterval(interval);
+  }, [currentRoomId, db, user, toast]);
 
   if (authLoading) {
     return (
@@ -344,6 +465,9 @@ export default function BudgetPlannerPage() {
           {currentRoomId && (
             <CardDescription className="text-center mt-2 text-sm text-muted-foreground">
               Room: <span className="font-semibold text-accent">{currentRoomName || 'Unnamed Room'}</span> (<span className="font-semibold text-accent select-all">{currentRoomId}</span>)
+              {memberCount > 0 && (
+                <span className="ml-2">• {memberCount} active member{memberCount === 1 ? '' : 's'}</span>
+              )}
             </CardDescription>
           )}
            {user.email && <span className="text-xs text-muted-foreground text-center mt-2 block sm:hidden">{user.email}</span>}
@@ -360,17 +484,27 @@ export default function BudgetPlannerPage() {
         )}
       </footer>
       {user && ( 
-        <RoomModal
-          isOpen={showRoomModal}
-          currentRoomId={currentRoomId}
-          currentRoomName={currentRoomName}
-          userHasActiveOwnedRoom={!!userOwnedRoomId}
-          onClose={() => setShowRoomModal(false)}
-          onCreateRoom={handleCreateRoom}
-          onJoinRoom={handleJoinRoom}
-          onLeaveRoom={handleLeaveRoomOperations} 
-          isLoading={isLoadingRoomAction}
-        />
+        <>
+          <RoomModal
+            isOpen={showRoomModal}
+            currentRoomId={currentRoomId}
+            currentRoomName={currentRoomName}
+            userHasActiveOwnedRoom={!!userOwnedRoomId}
+            onClose={() => setShowRoomModal(false)}
+            onCreateRoom={handleCreateRoom}
+            onJoinRoom={handleJoinRoom}
+            onLeaveRoom={handleLeaveRoomOperations} 
+            isLoading={isLoadingRoomAction}
+          />
+          
+          <LastMemberWarningDialog
+            isOpen={showLastMemberWarning}
+            roomName={currentRoomName}
+            roomId={currentRoomId || ''}
+            onConfirm={performLeaveRoom}
+            onCancel={() => setShowLastMemberWarning(false)}
+          />
+        </>
       )}
     </main>
   );

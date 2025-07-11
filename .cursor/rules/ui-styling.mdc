@@ -1,0 +1,42 @@
+---
+globs: src/components/ui/*,src/components/**/*.tsx,src/app/globals.css,tailwind.config.ts
+description: UI styling guidelines and design system for Summer Sprout Budget
+---
+
+# Summer Sprout Budget - UI & Styling Guidelines
+
+## Color Palette
+- **Primary Color**: Vibrant green (`#A0D6B4`) - symbolizes growth and new beginnings
+- **Background Color**: Light green (`#E5F0E7`) - very desaturated for soft, pleasing UI
+- **Accent Color**: Yellow (`#D4AC0D`) - contrasts beautifully with green shades for highlights
+- **Text Colors**: Use appropriate contrast ratios with the green backgrounds
+
+## Typography
+- **Font Family**: 'PT Sans' - humanist sans-serif for readability and modern look
+- Apply to both body text and headlines consistently
+
+## Icon Guidelines
+- **Income/Spending Icons**: Use line icons (not filled)
+- **Tips/Suggestions**: Feature lightbulb icons
+- Maintain consistent icon style throughout the application
+
+## Layout & Responsiveness
+- **Card-like Style**: Apply to all screens (mobile, tablet, desktop)
+- **Calendar Interface**: Must be fully responsive across all screen sizes
+- **Gentle Transitions**: Use smooth transition effects for:
+  - Month navigation in calendar
+  - Data entry interactions
+  - Component state changes
+
+## Component Standards
+All UI components should follow shadcn/ui patterns with Summer Sprout customizations:
+- Use Tailwind CSS classes with the established color palette
+- Ensure accessibility standards are met
+- Implement consistent spacing and typography scales
+- Apply card-style layouts where appropriate
+
+## Key UI Components
+- [calendar.tsx](mdc:src/components/ui/calendar.tsx) - Calendar interface
+- [card.tsx](mdc:src/components/ui/card.tsx) - Card layouts
+- [button.tsx](mdc:src/components/ui/button.tsx) - Consistent button styling
+- [input.tsx](mdc:src/components/ui/input.tsx) - Form inputs for budget data
